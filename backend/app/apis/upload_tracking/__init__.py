@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import asyncpg
-from databutton_app.mw.auth_mw import AuthorizedUser
+from app.auth import AuthorizedUser
 
 router = APIRouter(prefix="/upload-tracking")
 
