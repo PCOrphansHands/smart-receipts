@@ -341,10 +341,8 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
         from app.apis.gmail import get_gmail_service
         from googleapiclient.errors import HttpError
         import io
+        from playwright.async_api import async_playwright
 
-        # Import xhtml2pdf for HTML to PDF conversion (pure Python, no system deps)
-        from xhtml2pdf import pisa
-        
         service = await get_gmail_service(user)
         
         # Get the full message to extract HTML body
@@ -380,7 +378,7 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
             return None
         
         html_content = get_body(message['payload'])
-        
+
         if not html_content:
             return ProcessReceiptResponse(
                 success=False,
@@ -389,22 +387,32 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
                 suggested_filename=None,
                 pdf_content=None
             )
-        
-        # Convert HTML to PDF using xhtml2pdf
-        pdf_buffer = io.BytesIO()
-        pisa_status = pisa.CreatePDF(html_content, dest=pdf_buffer)
 
-        if pisa_status.err:
+        # Convert HTML to PDF using Playwright (high quality, preserves formatting)
+        try:
+            async with async_playwright() as p:
+                browser = await p.chromium.launch()
+                page = await browser.new_page()
+
+                # Set content and wait for it to load
+                await page.set_content(html_content, wait_until='networkidle')
+
+                # Generate PDF with good settings for receipts
+                pdf_data = await page.pdf(
+                    format='A4',
+                    print_background=True,
+                    margin={'top': '20px', 'right': '20px', 'bottom': '20px', 'left': '20px'}
+                )
+
+                await browser.close()
+        except Exception as e:
             return ProcessReceiptResponse(
                 success=False,
                 receipt_data=None,
-                error=f"Failed to convert email HTML to PDF: {pisa_status.err}",
+                error=f"Failed to convert email HTML to PDF: {str(e)}",
                 suggested_filename=None,
                 pdf_content=None
             )
-
-        pdf_buffer.seek(0)
-        pdf_data = pdf_buffer.read()
         
         # Store PDF content for upload
         pdf_content_base64 = base64.b64encode(pdf_data).decode('utf-8')
