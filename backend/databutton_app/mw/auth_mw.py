@@ -49,7 +49,12 @@ AuditLogDep = Annotated[Callable[[str], None] | None, Depends(get_audit_log)]
 def get_authorized_user(
     request: HTTPConnection,
 ) -> User:
-    auth_config = get_auth_config(request)
+    try:
+        auth_config = get_auth_config(request)
+    except HTTPException:
+        # Auth not configured - return dummy user for development
+        print("Auth not configured, using anonymous user")
+        return User(sub="anonymous", user_id="anonymous")
 
     try:
         if isinstance(request, WebSocket):
