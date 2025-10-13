@@ -7,21 +7,18 @@ import { RouteObject } from "react-router-dom";
 import { UserGuard } from "app";
 
 
-import { StackHandlerRoutes, LoginRedirect } from "app/auth";
-
-
 const App = lazy(() => import("./pages/App.tsx"));
 const GmailSetup = lazy(() => import("./pages/GmailSetup.tsx"));
 const UploadReceipts = lazy(() => import("./pages/UploadReceipts.tsx"));
+const SignIn = lazy(() => import("./pages/SignIn.tsx"));
 
 export const userRoutes: RouteObject[] = [
 
-	{ path: "/auth/redirect", element: <LoginRedirect />},
-	{ path: "/auth/*", element: <StackHandlerRoutes />},
+	{ path: "/sign-in", element: <SignIn />},
 	{ path: "/", element: <UserGuard><App /></UserGuard>},
-	{ path: "/gmail-setup", element: <GmailSetup />},
-	{ path: "/gmailsetup", element: <GmailSetup />},
-	{ path: "/upload-receipts", element: <UploadReceipts />},
-	{ path: "/uploadreceipts", element: <UploadReceipts />},
+	{ path: "/gmail-setup", element: <UserGuard><GmailSetup /></UserGuard>},
+	{ path: "/gmailsetup", element: <UserGuard><GmailSetup /></UserGuard>},
+	{ path: "/upload-receipts", element: <UserGuard><UploadReceipts /></UserGuard>},
+	{ path: "/uploadreceipts", element: <UserGuard><UploadReceipts /></UserGuard>},
 
 ];

@@ -1,24 +1,28 @@
-import { stackClientApp } from "./stack";
+import { supabase } from "./supabase";
 
 export const auth = {
   getAuthHeaderValue: async (): Promise<string> => {
-    const user = await stackClientApp.getUser();
+    const { data: { session } } = await supabase.auth.getSession();
 
-    if (!user) {
+    if (!session?.access_token) {
       return "";
     }
 
-    const { accessToken } = await user.getAuthJson();
-    return `Bearer ${accessToken}`;
+    return `Bearer ${session.access_token}`;
   },
   getAuthToken: async (): Promise<string> => {
-    const user = await stackClientApp.getUser();
-
-    if (!user) {
-      return "";
-    }
-
-    const { accessToken } = await user.getAuthJson();
-    return accessToken ?? "";
+    const { data: { session } } = await supabase.auth.getSession();
+    return session?.access_token ?? "";
+  },
+  signOut: async (): Promise<void> => {
+    await supabase.auth.signOut();
+  },
+  signInWithGoogle: async (): Promise<void> => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin
+      }
+    });
   }
 }

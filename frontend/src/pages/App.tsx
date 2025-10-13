@@ -9,7 +9,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { stackClientApp } from 'app/auth';
+import { auth } from 'app/auth';
 
 export default function App() {
   const navigate = useNavigate();
@@ -192,7 +192,7 @@ export default function App() {
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
               <LanguageSelector />
-              <Button variant="outline" size="sm" onClick={() => stackClientApp.signOut()}>
+              <Button variant="outline" size="sm" onClick={() => auth.signOut()}>
                 <LogOut className="w-4 h-4 sm:mr-2" />
                 <span className="hidden sm:inline">{t('common.signOut')}</span>
               </Button>

@@ -12,10 +12,9 @@ Deploy the entire Smart Receipts app on Vercel Pro + Supabase. No Railway needed
 
 1. [Vercel Pro Account](https://vercel.com) (You have this! ✅)
 2. [Supabase Account](https://supabase.com) (Free tier is fine)
-3. [Stack Auth Account](https://stack-auth.com)
-4. [OpenAI API Key](https://platform.openai.com/api-keys)
-5. [Google Cloud Project](https://console.cloud.google.com) (Gmail OAuth)
-6. [Dropbox App](https://www.dropbox.com/developers/apps)
+3. [OpenAI API Key](https://platform.openai.com/api-keys)
+4. [Google Cloud Project](https://console.cloud.google.com) (For Gmail OAuth + Google Sign-In)
+5. [Dropbox App](https://www.dropbox.com/developers/apps)
 
 ---
 
@@ -42,6 +41,22 @@ Deploy the entire Smart Receipts app on Vercel Pro + Supabase. No Railway needed
 3. Replace `[YOUR-PASSWORD]` with your actual password
 4. Save this for later
 
+### 1.4 Get Supabase API Credentials
+
+1. **Project Settings** → **API**
+2. Copy **Project URL** (e.g., `https://xxxxx.supabase.co`)
+3. Copy **anon public** key
+4. Save these for frontend configuration
+
+### 1.5 Configure Google OAuth Provider
+
+1. In Supabase Dashboard → **Authentication** → **Providers**
+2. Enable **Google** provider
+3. You'll need to set up Google OAuth credentials first (see Part 5)
+4. Add your Google Client ID and Client Secret
+5. Copy the **Callback URL** (e.g., `https://xxxxx.supabase.co/auth/v1/callback`)
+6. Add this callback URL to your Google OAuth app
+
 ---
 
 ## Part 2: Backend Deployment (Vercel)
@@ -66,13 +81,16 @@ ENVIRONMENT=production
 FRONTEND_URL=https://smart-receipts.vercel.app
 BACKEND_URL=https://smart-receipts-backend.vercel.app
 
-# Database (from Supabase)
+# Supabase (from Supabase Dashboard → API)
+SUPABASE_URL=https://xxxxx.supabase.co
+
+# Database (from Supabase Dashboard → Database)
 DATABASE_URL=postgresql://postgres:[PASSWORD]@db.[PROJECT].supabase.co:5432/postgres
 
 # OpenAI
 OPENAI_API_KEY=sk-...
 
-# Google OAuth
+# Google OAuth (for Gmail API)
 GOOGLE_CLIENT_ID=xxx.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=xxx
 GMAIL_OAUTH_CREDENTIALS={"web":{...}}
@@ -80,9 +98,6 @@ GMAIL_OAUTH_CREDENTIALS={"web":{...}}
 # Dropbox
 DROPBOX_APP_KEY=xxx
 DROPBOX_APP_SECRET=xxx
-
-# Stack Auth
-STACK_SECRET_SERVER_KEY=xxx
 ```
 
 ### 2.3 Deploy
@@ -108,9 +123,12 @@ Click "Deploy" and wait for it to finish. Your backend will be at:
 ### 3.2 Add Environment Variables
 
 ```bash
-DATABUTTON_PROJECT_ID=e7426d99-15d4-492f-902a-bea7390fc46e
-DATABUTTON_CUSTOM_DOMAIN=
-DATABUTTON_EXTENSIONS=[{"name":"shadcn","version":"1"},{"name":"stack-auth","version":"1","config":{"projectId":"25106be9-f049-45a8-9c3e-571c211a90df","publishableClientKey":"pck_h38h016byyjmkhy26fq3hfppxhrd9dke5sz8v3mwwht9r","jwksUrl":"https://api.stack-auth.com/api/v1/projects/25106be9-f049-45a8-9c3e-571c211a90df/.well-known/jwks.json","secretRefForSecretServerKey":{"name":"STACK_SECRET_SERVER_KEY"}}}]
+# Supabase (from Supabase Dashboard → API)
+VITE_SUPABASE_URL=https://xxxxx.supabase.co
+VITE_SUPABASE_ANON_KEY=your-anon-public-key
+
+# Backend API URL (after backend deployment)
+VITE_API_URL=https://smart-receipts-backend.vercel.app
 ```
 
 ### 3.3 Deploy
@@ -139,15 +157,21 @@ After both deployments:
 
 ## Part 5: OAuth Configuration
 
-### 5.1 Google OAuth (Gmail)
+### 5.1 Google OAuth (For Google Sign-In + Gmail API)
 
-1. [Google Cloud Console](https://console.cloud.google.com)
-2. Enable Gmail API
-3. Create OAuth 2.0 credentials
-4. Add redirect URIs:
-   - `https://smart-receipts-backend.vercel.app/routes/gmail/auth/callback`
-   - `http://localhost:8000/routes/gmail/auth/callback` (dev)
-5. Download credentials JSON → Set as `GMAIL_OAUTH_CREDENTIALS`
+1. Go to [Google Cloud Console](https://console.cloud.google.com)
+2. Create a new project or select existing
+3. **Enable APIs**:
+   - Gmail API (for email scanning)
+4. **Create OAuth 2.0 Credentials** (Credentials → Create Credentials → OAuth client ID):
+   - Application type: Web application
+   - **Authorized redirect URIs**:
+     - `https://xxxxx.supabase.co/auth/v1/callback` (Supabase auth callback)
+     - `https://smart-receipts-backend.vercel.app/routes/gmail/auth/callback` (Gmail API callback)
+     - `http://localhost:8000/routes/gmail/auth/callback` (dev)
+5. Copy **Client ID** and **Client Secret**
+6. **For Gmail API**: Download the full credentials JSON and set it as `GMAIL_OAUTH_CREDENTIALS` in backend
+7. **For Supabase Auth**: Add Client ID and Client Secret to Supabase (Part 1.5)
 
 ### 5.2 Dropbox OAuth
 
@@ -164,11 +188,11 @@ After both deployments:
 ## Part 6: Test Your App
 
 1. Visit `https://smart-receipts.vercel.app`
-2. Sign up with Stack Auth
-3. Connect Gmail
-4. Connect Dropbox
-5. Upload a test receipt
-6. Verify it appears in Dropbox
+2. Sign in with Google (via Supabase Auth)
+3. Connect Gmail for email scanning
+4. Connect Dropbox for storage
+5. Upload a test receipt or scan Gmail
+6. Verify receipts appear in Dropbox
 
 ---
 

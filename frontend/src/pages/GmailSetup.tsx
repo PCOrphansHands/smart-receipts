@@ -11,13 +11,13 @@ import { Loader2, FileText, CheckCircle2, Upload, FolderOpen, LogOut } from 'luc
 import { useTranslation } from 'react-i18next';
 import LanguageSelector from 'components/LanguageSelector';
 import { useNavigate } from 'react-router-dom';
-import { useUser } from '@stackframe/react';
-import { stackClientApp } from 'app/auth';
+import { auth } from 'app/auth';
+import { useUserGuardContext } from 'app/auth/UserGuard';
 
 export default function GmailSetup() {
   const { t } = useTranslation();
   const navigate = useNavigate();
-  const user = useUser();
+  const { user } = useUserGuardContext();
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [emails, setEmails] = useState<ReceiptEmailsResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
@@ -374,7 +374,7 @@ export default function GmailSetup() {
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
               <LanguageSelector />
-              <Button variant="outline" size="sm" onClick={() => stackClientApp.signOut()}>
+              <Button variant="outline" size="sm" onClick={() => auth.signOut()}>
                 <LogOut className="w-4 h-4 sm:mr-2" />
                 <span className="hidden sm:inline">{t('common.signOut')}</span>
               </Button>

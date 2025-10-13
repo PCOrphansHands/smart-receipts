@@ -65,15 +65,37 @@ def import_api_routers() -> APIRouter:
     return routes
 
 
-def get_firebase_config() -> dict | None:
-    extensions = os.environ.get("DATABUTTON_EXTENSIONS", "[]")
-    extensions = json.loads(extensions)
+def get_supabase_auth_config() -> dict | None:
+    """Get Supabase authentication configuration from environment variables."""
+    supabase_url = os.environ.get("SUPABASE_URL")
 
-    for ext in extensions:
-        if ext["name"] == "firebase-auth":
-            return ext["config"]["firebaseConfig"]
+    if not supabase_url:
+        # Try to extract from DATABASE_URL if SUPABASE_URL is not set
+        # DATABASE_URL format: postgresql://postgres:password@db.PROJECT_REF.supabase.co:5432/postgres
+        database_url = os.environ.get("DATABASE_URL")
+        if database_url and ".supabase.co" in database_url:
+            # Extract project ref from database URL
+            import re
+            match = re.search(r'@db\.([^\.]+)\.supabase\.co', database_url)
+            if match:
+                project_ref = match.group(1)
+                supabase_url = f"https://{project_ref}.supabase.co"
 
-    return None
+    if not supabase_url:
+        print("No Supabase URL found in environment variables")
+        return None
+
+    # Supabase JWT configuration
+    # JWKS endpoint for Supabase
+    jwks_url = f"{supabase_url}/auth/v1/jwks"
+    # Audience for Supabase JWT tokens (typically "authenticated")
+    audience = "authenticated"
+
+    return {
+        "jwks_url": jwks_url,
+        "audience": audience,
+        "header": "authorization",
+    }
 
 
 def create_app() -> FastAPI:
@@ -97,20 +119,15 @@ def create_app() -> FastAPI:
             for method in route.methods:
                 print(f"{method} {route.path}")
 
-    firebase_config = get_firebase_config()
+    # Configure Supabase authentication
+    supabase_config = get_supabase_auth_config()
 
-    if firebase_config is None:
-        print("No firebase config found")
+    if supabase_config is None:
+        print("Warning: No Supabase auth config found - authentication will be disabled")
         app.state.auth_config = None
     else:
-        print("Firebase config found")
-        auth_config = {
-            "jwks_url": "https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com",
-            "audience": firebase_config["projectId"],
-            "header": "authorization",
-        }
-
-        app.state.auth_config = AuthConfig(**auth_config)
+        print(f"Supabase auth configured with JWKS URL: {supabase_config['jwks_url']}")
+        app.state.auth_config = AuthConfig(**supabase_config)
 
     return app
 

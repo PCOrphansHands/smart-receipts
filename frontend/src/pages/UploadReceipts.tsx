@@ -4,14 +4,13 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from 'sonner';
 import brain from 'brain';
-import { useUser } from '@stackframe/react';
 import type { UploadedReceiptResponse } from 'types';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LanguageSelector from 'components/LanguageSelector';
 import CameraCapture from 'components/CameraCapture';
 import jsPDF from 'jspdf';
-import { stackClientApp } from 'app/auth';
+import { auth } from 'app/auth';
 
 interface ProcessedFile {
   id: string;
@@ -22,7 +21,6 @@ interface ProcessedFile {
 }
 
 export default function UploadReceipts() {
-  const user = useUser();
   const { t } = useTranslation();
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
@@ -302,7 +300,7 @@ export default function UploadReceipts() {
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
               <LanguageSelector />
-              <Button variant="outline" size="sm" onClick={() => stackClientApp.signOut()}>
+              <Button variant="outline" size="sm" onClick={() => auth.signOut()}>
                 <LogOut className="w-4 h-4 sm:mr-2" />
                 <span className="hidden sm:inline">{t('common.signOut')}</span>
               </Button>

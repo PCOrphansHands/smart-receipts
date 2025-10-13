@@ -1,11 +1,12 @@
 import type { ReactNode } from "react";
 import 'utils/i18n';
 import { useLanguageDetection } from 'utils/useLanguageDetection';
-import { useUser } from '@stackframe/react';
 import { useEffect, useState } from 'react';
 import { isAllowedDomain, ALLOWED_DOMAIN } from 'utils/domainValidation';
-import { stackClientApp } from 'app/auth';
+import { supabase } from 'app/auth/supabase';
+import { auth } from 'app/auth';
 import { toast } from 'sonner';
+import type { User } from '@supabase/supabase-js';
 
 interface Props {
   children: ReactNode;
@@ -16,16 +17,30 @@ interface Props {
  * Signs out users with unauthorized domains and shows an error message.
  */
 const DomainGuard = ({ children }: { children: ReactNode }) => {
-  const user = useUser();
+  const [user, setUser] = useState<User | null>(null);
   const [hasChecked, setHasChecked] = useState(false);
+
+  useEffect(() => {
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   useEffect(() => {
     const checkDomain = async () => {
       // Only check if user is authenticated and we haven't checked yet
       if (user && !hasChecked) {
-        const userEmail = user.primaryEmail;
-        
-        if (!isAllowedDomain(userEmail)) {
+        const userEmail = user.email;
+
+        if (userEmail && !isAllowedDomain(userEmail)) {
           // Show error message
           toast.error(
             `Access Denied`,
@@ -34,11 +49,11 @@ const DomainGuard = ({ children }: { children: ReactNode }) => {
               duration: 10000,
             }
           );
-          
+
           // Sign out the user
-          await stackClientApp.signOut();
+          await auth.signOut();
         }
-        
+
         setHasChecked(true);
       } else if (!user) {
         // Reset check when user signs out

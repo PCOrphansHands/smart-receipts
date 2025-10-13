@@ -1,16 +1,12 @@
 import { APP_BASE_PATH } from "@/constants";
-import {
-  type CurrentInternalServerUser,
-  type CurrentUser,
-  useStackApp,
-  useUser,
-} from "@stackframe/react";
+import type { User } from "@supabase/supabase-js";
 import type * as React from "react";
-import { createContext, useContext } from "react";
+import { createContext, useContext, useEffect, useState } from "react";
 import { Navigate, useLocation } from "react-router-dom";
+import { supabase } from "./supabase";
 
 type UserGuardContextType = {
-  user: CurrentUser | CurrentInternalServerUser;
+  user: User;
 };
 
 const UserGuardContext = createContext<UserGuardContextType | undefined>(
@@ -39,17 +35,38 @@ const writeToLocalStorage = (key: string, value: string) => {
 export const UserGuard = (props: {
   children: React.ReactNode;
 }) => {
-  const app = useStackApp();
-  const user = useUser();
+  const [user, setUser] = useState<User | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const { pathname } = useLocation();
+
+  useEffect(() => {
+    // Check current session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setLoading(false);
+    });
+
+    // Listen for auth changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  if (loading) {
+    return null; // Or a loading spinner
+  }
 
   if (!user) {
     const queryParams = new URLSearchParams(window.location.search);
 
     // Don't set the next param if the user is logging out
     // to avoid ending up in an infinite redirect loop
-    if (pathname !== app.urls.signOut) {
+    if (pathname !== "/sign-out") {
       writeToLocalStorage("dtbn-login-next", pathname);
       queryParams.set("next", pathname);
     }
@@ -58,7 +75,7 @@ export const UserGuard = (props: {
 
     return (
       <Navigate
-        to={`${app.urls.signIn.replace(APP_BASE_PATH, "/").replace("//", "/")}?${queryString}`}
+        to={`/sign-in?${queryString}`}
         replace={true}
       />
     );
