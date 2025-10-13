@@ -3,8 +3,7 @@ import 'utils/i18n';
 import { useLanguageDetection } from 'utils/useLanguageDetection';
 import { useEffect, useState } from 'react';
 import { isAllowedDomain, ALLOWED_DOMAIN } from 'utils/domainValidation';
-import { supabase } from 'app/auth/supabase';
-import { auth } from 'app/auth';
+import { supabase, auth } from 'app/auth';
 import { toast } from 'sonner';
 import type { User } from '@supabase/supabase-js';
 
