@@ -1,5 +1,6 @@
 [phases.setup]
-nixPkgs = ["python312", "cairo.dev", "pkg-config"]
+nixPkgs = ["python312", "cairo", "pkg-config"]
+aptPkgs = ["libcairo2-dev"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
