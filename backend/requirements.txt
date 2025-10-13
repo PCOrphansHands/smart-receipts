@@ -26,4 +26,4 @@ dropbox==11.36.2
 requests==2.31.0
 beautifulsoup4==4.12.3
 PyPDF2==3.0.1
-pillow==10.2.0
+pillow==10.4.0
