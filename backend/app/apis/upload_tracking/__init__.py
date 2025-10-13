@@ -3,6 +3,7 @@ Upload tracking API endpoints
 Tracks which receipts have been uploaded to Dropbox
 """
 import os
+import json
 from datetime import datetime
 from typing import Optional
 from fastapi import APIRouter, HTTPException
@@ -47,19 +48,22 @@ async def mark_uploaded(request: MarkUploadedRequest, user: AuthorizedUser) -> d
         conn = await get_db_connection()
         try:
             # Insert or update the upload status
+            # Convert metadata dict to JSON string for JSONB column
+            metadata_json = json.dumps(request.receipt_metadata) if request.receipt_metadata else None
+
             await conn.execute(
                 """
                 INSERT INTO uploaded_receipts (
                     user_id, receipt_key, uploaded_to_dropbox, upload_timestamp,
                     dropbox_paths, receipt_metadata, source_type, updated_at
                 )
-                VALUES ($1, $2, TRUE, $3, $4, $5, $6, $7)
+                VALUES ($1, $2, TRUE, $3, $4, $5::jsonb, $6, $7)
                 ON CONFLICT (user_id, receipt_key)
                 DO UPDATE SET
                     uploaded_to_dropbox = TRUE,
                     upload_timestamp = $3,
                     dropbox_paths = $4,
-                    receipt_metadata = $5,
+                    receipt_metadata = $5::jsonb,
                     source_type = $6,
                     updated_at = $7
                 """,
@@ -67,7 +71,7 @@ async def mark_uploaded(request: MarkUploadedRequest, user: AuthorizedUser) -> d
                 request.receipt_key,
                 datetime.utcnow(),
                 request.dropbox_paths,
-                request.receipt_metadata,
+                metadata_json,
                 request.source_type,
                 datetime.utcnow(),
             )
