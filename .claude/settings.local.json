@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git init:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$(cat <<''EOF''\nInitial commit: Migrate Smart Receipts from Databutton to Vercel/Railway\n\nMajor changes:\n- Removed Databutton dependency\n- Migrated to environment variables for secrets\n- Added Supabase database support\n- Configured CORS for Vercel frontend\n- Updated OAuth flows for Gmail and Dropbox\n- Created deployment documentation\n\nTech stack:\n- Frontend: React + Vite → Vercel\n- Backend: FastAPI + Python → Railway\n- Database: PostgreSQL → Supabase\n- Auth: Stack Auth\n- AI: OpenAI GPT-4o-mini for receipt extraction\n\nGenerated with Claude Code\nEOF\n)\")"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
