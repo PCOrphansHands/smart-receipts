@@ -7,6 +7,21 @@ import tsConfigPaths from "vite-tsconfig-paths";
 // https://vite.dev/config/
 export default defineConfig({
 	plugins: [react(), tsConfigPaths()],
+	define: {
+		__APP_ID__: JSON.stringify("smart-receipts"),
+		__API_PATH__: JSON.stringify("/routes"),
+		__API_URL__: JSON.stringify(process.env.VITE_API_URL || "http://localhost:8000"),
+		__API_HOST__: JSON.stringify(process.env.VITE_API_URL || "http://localhost:8000"),
+		__API_PREFIX_PATH__: JSON.stringify("/routes"),
+		__WS_API_URL__: JSON.stringify(""),
+		__APP_BASE_PATH__: JSON.stringify("/"),
+		__APP_TITLE__: JSON.stringify("Smart Receipts"),
+		__APP_FAVICON_LIGHT__: JSON.stringify("/favicon.ico"),
+		__APP_FAVICON_DARK__: JSON.stringify("/favicon.ico"),
+		__APP_DEPLOY_USERNAME__: JSON.stringify(""),
+		__APP_DEPLOY_APPNAME__: JSON.stringify("smart-receipts"),
+		__APP_DEPLOY_CUSTOM_DOMAIN__: JSON.stringify(""),
+	},
 	server: {
 		proxy: {
 			"/routes": {
