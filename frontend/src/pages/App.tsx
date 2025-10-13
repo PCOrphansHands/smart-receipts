@@ -183,9 +183,9 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-3">
-              <img 
-                src="https://static.databutton.com/public/e7426d99-15d4-492f-902a-bea7390fc46e/OH Logo-Aqua-Stacked copy.png" 
-                alt="Smart Receipts Logo" 
+              <img
+                src="/logo.png"
+                alt="Smart Receipts Logo"
                 className="h-12 w-auto"
               />
               <h1 className="text-2xl sm:text-3xl font-bold text-brand-primary">{t('home.title')}</h1>

@@ -41,7 +41,7 @@ export default function SignIn() {
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
             <img
-              src="https://static.databutton.com/public/e7426d99-15d4-492f-902a-bea7390fc46e/OH Logo-Aqua-Stacked copy.png"
+              src="/logo.png"
               alt="Smart Receipts Logo"
               className="h-20 w-auto"
             />
