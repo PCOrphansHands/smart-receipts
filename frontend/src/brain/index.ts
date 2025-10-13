@@ -1,6 +1,7 @@
 import { API_PATH, API_HOST } from "../constants";
 import { Brain } from "./Brain";
 import type { RequestParams } from "./http-client";
+import { auth } from "../app/auth";
 
 const isLocalhost = /localhost:\d{4}/i.test(window.location.origin);
 
@@ -17,6 +18,7 @@ type BaseApiParams = Omit<RequestParams, "signal" | "baseUrl" | "cancelToken">;
 const constructBaseApiParams = (): BaseApiParams => {
   return {
     credentials: "include",
+    headers: {},
   };
 };
 
@@ -24,10 +26,25 @@ const constructClient = () => {
   const baseUrl = constructBaseUrl();
   const baseApiParams = constructBaseApiParams();
 
-  return new Brain({
+  const brainClient = new Brain({
     baseUrl,
     baseApiParams,
   });
+
+  // Add auth header to all requests
+  const originalRequest = brainClient.request.bind(brainClient);
+  brainClient.request = async (config) => {
+    const authHeader = await auth.getAuthHeaderValue();
+    if (authHeader) {
+      config.headers = {
+        ...config.headers,
+        Authorization: authHeader,
+      };
+    }
+    return originalRequest(config);
+  };
+
+  return brainClient;
 };
 
 const brain = constructClient();
