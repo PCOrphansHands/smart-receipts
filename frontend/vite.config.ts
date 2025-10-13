@@ -16,18 +16,20 @@ export default defineConfig({
 		},
 	},
 	resolve: {
-		alias: {
-			"@": path.resolve(__dirname, "./src"),
-			"@/components/ui": path.resolve(__dirname, "./src/extensions/shadcn/components"),
-			"@/hooks": path.resolve(__dirname, "./src/extensions/shadcn/hooks"),
-			"@/components/hooks": path.resolve(__dirname, "./src/extensions/shadcn/hooks"),
-			"brain": path.resolve(__dirname, "./src/brain"),
-			"types": path.resolve(__dirname, "./src/brain/data-contracts.ts"),
-			"components": path.resolve(__dirname, "./src/components"),
-			"pages": path.resolve(__dirname, "./src/pages"),
-			"app": path.resolve(__dirname, "./src/app"),
-			"app/auth": path.resolve(__dirname, "./src/app/auth"),
-			"utils": path.resolve(__dirname, "./src/utils"),
-		},
+		alias: [
+			// More specific paths must come first
+			{ find: /^@\/components\/ui\/(.*)$/, replacement: path.resolve(__dirname, "./src/extensions/shadcn/components/$1") },
+			{ find: /^@\/components\/hooks\/(.*)$/, replacement: path.resolve(__dirname, "./src/extensions/shadcn/hooks/$1") },
+			{ find: /^@\/hooks\/(.*)$/, replacement: path.resolve(__dirname, "./src/extensions/shadcn/hooks/$1") },
+			{ find: "app/auth", replacement: path.resolve(__dirname, "./src/app/auth") },
+			{ find: "brain", replacement: path.resolve(__dirname, "./src/brain") },
+			{ find: "types", replacement: path.resolve(__dirname, "./src/brain/data-contracts.ts") },
+			{ find: "components", replacement: path.resolve(__dirname, "./src/components") },
+			{ find: "pages", replacement: path.resolve(__dirname, "./src/pages") },
+			{ find: "app", replacement: path.resolve(__dirname, "./src/app") },
+			{ find: "utils", replacement: path.resolve(__dirname, "./src/utils") },
+			// General @ alias comes last
+			{ find: "@", replacement: path.resolve(__dirname, "./src") },
+		],
 	},
 });
