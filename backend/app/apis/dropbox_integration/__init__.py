@@ -147,7 +147,7 @@ class DropboxReceiptsResponse(BaseModel):
 
 
 @router.get("/dropbox/auth-url")
-async def get_dropbox_auth_url() -> DropboxAuthUrlResponse:
+async def get_dropbox_auth_url(user: AuthorizedUser) -> DropboxAuthUrlResponse:
     """
     Generate a Dropbox OAuth authorization URL.
     User should be redirected to this URL to authorize the app.
@@ -155,13 +155,13 @@ async def get_dropbox_auth_url() -> DropboxAuthUrlResponse:
     try:
         settings = get_settings()
         app_key = settings.DROPBOX_APP_KEY
-        
+
         # Get redirect URI from settings
         redirect_uri = f"{settings.BACKEND_URL}/routes/dropbox/callback"
-        
+
         # Generate a random state for CSRF protection
         state = secrets.token_urlsafe(32)
-        await _store_oauth_state(state)
+        await _store_oauth_state(state, user.sub)
         
         # Build authorization URL
         auth_url = f"https://www.dropbox.com/oauth2/authorize?client_id={app_key}&redirect_uri={redirect_uri}&response_type=code&token_access_type=offline&state={state}"
