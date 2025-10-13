@@ -1,11 +1,11 @@
 import os
 import pathlib
 import json
-import dotenv
+from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
-dotenv.load_dotenv()
+load_dotenv()
 
 from databutton_app.mw.auth_mw import AuthConfig, get_authorized_user
 from app.config import get_settings
