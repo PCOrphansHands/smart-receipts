@@ -75,35 +75,10 @@ def import_api_routers() -> APIRouter:
 
 def get_supabase_auth_config() -> dict | None:
     """Get Supabase authentication configuration from environment variables."""
-    supabase_url = os.environ.get("SUPABASE_URL")
-
-    if not supabase_url:
-        # Try to extract from DATABASE_URL if SUPABASE_URL is not set
-        # DATABASE_URL format: postgresql://postgres:password@db.PROJECT_REF.supabase.co:5432/postgres
-        database_url = os.environ.get("DATABASE_URL")
-        if database_url and ".supabase.co" in database_url:
-            # Extract project ref from database URL
-            import re
-            match = re.search(r'@db\.([^\.]+)\.supabase\.co', database_url)
-            if match:
-                project_ref = match.group(1)
-                supabase_url = f"https://{project_ref}.supabase.co"
-
-    if not supabase_url:
-        print("No Supabase URL found in environment variables")
-        return None
-
-    # Supabase JWT configuration
-    # JWKS endpoint for Supabase
-    jwks_url = f"{supabase_url}/auth/v1/jwks"
-    # Audience for Supabase JWT tokens (typically "authenticated")
-    audience = "authenticated"
-
-    return {
-        "jwks_url": jwks_url,
-        "audience": audience,
-        "header": "authorization",
-    }
+    # For Supabase with legacy JWT secret, we don't use JWKS
+    # Instead, we disable auth validation for now
+    # TODO: Implement proper JWT validation with Supabase JWT secret
+    return None
 
 
 def create_app() -> FastAPI:
