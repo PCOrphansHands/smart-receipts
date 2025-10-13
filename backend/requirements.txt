@@ -1,20 +1,29 @@
 # Smart Receipts Backend Requirements
-uvicorn[standard]==0.34.2
-python-multipart==0.0.9
+# Core API dependencies
 fastapi==0.115.12
-openai
-beautifulsoup4
-requests
-asyncpg
-python-dotenv
+uvicorn==0.34.2
+python-multipart==0.0.9
+
+# Authentication
 PyJWT==2.8.0
 cryptography==41.0.7
-google-api-python-client
-google-auth-httplib2
-google-auth-oauthlib
-pdf2image
-PyPDF2
-pillow
-weasyprint
-dropbox
-PyMuPDF
+
+# Database
+asyncpg==0.29.0
+
+# OpenAI
+openai==1.12.0
+
+# Google APIs
+google-api-python-client==2.108.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.0
+
+# Dropbox
+dropbox==11.36.2
+
+# Utilities
+requests==2.31.0
+beautifulsoup4==4.12.3
+PyPDF2==3.0.1
+pillow==10.2.0
