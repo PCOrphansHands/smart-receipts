@@ -394,13 +394,37 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
                 browser = await p.chromium.launch()
                 page = await browser.new_page()
 
-                # Set content and wait for it to load
-                await page.set_content(html_content, wait_until='networkidle')
+                # Set viewport to a standard email width
+                await page.set_viewport_size({"width": 800, "height": 1200})
+
+                # Set content with longer timeout for images to load
+                await page.set_content(html_content, wait_until='networkidle', timeout=30000)
+
+                # Wait a bit more for lazy-loaded images and dynamic content
+                await page.wait_for_timeout(2000)
+
+                # Try to load all images by evaluating them
+                try:
+                    await page.evaluate("""
+                        () => {
+                            return Promise.all(
+                                Array.from(document.images)
+                                    .filter(img => !img.complete)
+                                    .map(img => new Promise(resolve => {
+                                        img.onload = img.onerror = resolve;
+                                    }))
+                            );
+                        }
+                    """)
+                except:
+                    pass  # If image loading fails, continue anyway
 
                 # Generate PDF with good settings for receipts
                 pdf_data = await page.pdf(
                     format='A4',
                     print_background=True,
+                    prefer_css_page_size=False,
+                    display_header_footer=False,
                     margin={'top': '20px', 'right': '20px', 'bottom': '20px', 'left': '20px'}
                 )
 
