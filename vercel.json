@@ -1,7 +1,5 @@
 {
-  "rootDirectory": "frontend",
   "outputDirectory": "dist",
-  "framework": null,
   "buildCommand": "yarn build",
   "installCommand": "yarn install"
 }
