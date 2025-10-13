@@ -1,11 +1,16 @@
 import os
 import pathlib
 import json
-from dotenv import load_dotenv
 from fastapi import FastAPI, APIRouter, Depends
 from fastapi.middleware.cors import CORSMiddleware
 
-load_dotenv()
+# Load dotenv only in development (Vercel injects env vars directly)
+if os.getenv("ENVIRONMENT") != "production":
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+    except ImportError:
+        pass  # dotenv not available, which is fine in production
 
 from databutton_app.mw.auth_mw import AuthConfig, get_authorized_user
 from app.config import get_settings
