@@ -13,7 +13,7 @@ cryptography==41.0.7
 asyncpg==0.30.0
 
 # OpenAI
-openai==1.30.0
+openai==1.51.0
 
 # Google APIs
 google-api-python-client==2.108.0
@@ -24,7 +24,7 @@ google-auth-oauthlib==1.2.0
 dropbox==11.36.2
 
 # Utilities
-requests==2.31.0
+requests==2.32.3
 beautifulsoup4==4.12.3
 PyPDF2==3.0.1
 pillow==10.4.0
