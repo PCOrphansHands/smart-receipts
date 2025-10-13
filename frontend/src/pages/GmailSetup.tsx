@@ -878,7 +878,8 @@ export default function GmailSetup() {
                               </div>
                             </CardContent>
                           </Card>
-                        ))}
+                        );
+                      })}
                       </div>
                     </div>
                   )}
