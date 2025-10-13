@@ -4,7 +4,6 @@ from openai import OpenAI
 import base64
 import requests
 from datetime import datetime
-import weasyprint
 from googleapiclient.discovery import build
 from google.oauth2.credentials import Credentials
 from googleapiclient.errors import HttpError
@@ -147,11 +146,20 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
         elif attachment_mime_type == 'application/pdf':
             # PDF - store original for upload
             pdf_content_base64 = base64.b64encode(file_data).decode('utf-8')
-            
+
             # Convert first page to image for OpenAI Vision
-            from pdf2image import convert_from_bytes
+            try:
+                from pdf2image import convert_from_bytes
+            except ImportError:
+                return ProcessReceiptResponse(
+                    success=False,
+                    receipt_data=None,
+                    error="PDF processing not available - pdf2image not installed in serverless environment. Please upload images instead.",
+                    suggested_filename=None,
+                    pdf_content=None
+                )
             import io
-            
+
             try:
                 # Convert PDF to images (just first page for receipt)
                 images = convert_from_bytes(file_data, first_page=1, last_page=1)
@@ -354,9 +362,20 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
         # Import required libraries for HTML to PDF conversion
         from app.apis.gmail import get_gmail_service
         from googleapiclient.errors import HttpError
-        from weasyprint import HTML
-        from pdf2image import convert_from_bytes
         import io
+
+        # Optional imports for PDF conversion (not available in serverless)
+        try:
+            from weasyprint import HTML
+            from pdf2image import convert_from_bytes
+        except ImportError:
+            return ProcessReceiptResponse(
+                success=False,
+                receipt_data=None,
+                error="Email body processing not available - PDF conversion libraries not installed in serverless environment",
+                suggested_filename=None,
+                pdf_content=None
+            )
         
         service = await get_gmail_service(user)
         

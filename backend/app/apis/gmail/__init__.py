@@ -536,7 +536,13 @@ async def convert_email_to_pdf(email_id: str, user: AuthorizedUser):
     Returns the PDF data in base64 format.
     """
     try:
-        from weasyprint import HTML
+        try:
+            from weasyprint import HTML
+        except ImportError:
+            raise HTTPException(
+                status_code=501,
+                detail="PDF conversion not available - weasyprint not installed in serverless environment"
+            )
         import io
         
         service = await get_gmail_service(user)
