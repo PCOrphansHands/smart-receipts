@@ -18,15 +18,18 @@ from app.config import get_settings
 
 def get_router_config() -> dict:
     try:
-        # Note: This file is not available to the agent
-        cfg = json.loads(open("routers.json").read())
-    except:
+        config_path = pathlib.Path(__file__).parent / "routers.json"
+        cfg = json.loads(config_path.read_text())
+    except Exception as e:
+        print(f"Warning: Could not load routers.json: {e}")
         return False
     return cfg
 
 
 def is_auth_disabled(router_config: dict, name: str) -> bool:
-    return router_config["routers"][name]["disableAuth"]
+    if not router_config or not isinstance(router_config, dict):
+        return False  # Enable auth by default if no config
+    return router_config.get("routers", {}).get(name, {}).get("disableAuth", False)
 
 
 def import_api_routers() -> APIRouter:
