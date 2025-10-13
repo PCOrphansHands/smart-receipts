@@ -147,38 +147,16 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
             # PDF - store original for upload
             pdf_content_base64 = base64.b64encode(file_data).decode('utf-8')
 
-            # Convert first page to image for OpenAI Vision
+            # Convert first page to image for OpenAI Vision using PyMuPDF
             try:
-                from pdf2image import convert_from_bytes
-            except ImportError:
-                return ProcessReceiptResponse(
-                    success=False,
-                    receipt_data=None,
-                    error="PDF processing not available - pdf2image not installed in serverless environment. Please upload images instead.",
-                    suggested_filename=None,
-                    pdf_content=None
-                )
-            import io
-
-            try:
-                # Convert PDF to images (just first page for receipt)
-                images = convert_from_bytes(file_data, first_page=1, last_page=1)
-                
-                if images:
-                    # Convert PIL image to base64
-                    img_buffer = io.BytesIO()
-                    images[0].save(img_buffer, format='PNG')
-                    img_buffer.seek(0)
-                    image_base64 = base64.b64encode(img_buffer.read()).decode('utf-8')
-                    attachment_mime_type = 'image/png'  # Update mime type for OpenAI
-                else:
-                    return ProcessReceiptResponse(
-                        success=False,
-                        receipt_data=None,
-                        error="Failed to convert PDF to image",
-                        suggested_filename=None,
-                        pdf_content=None
-                    )
+                import fitz  # PyMuPDF
+                pdf_doc = fitz.open(stream=file_data, filetype="pdf")
+                first_page = pdf_doc[0]
+                pix = first_page.get_pixmap(dpi=150)
+                img_data = pix.tobytes("png")
+                image_base64 = base64.b64encode(img_data).decode('utf-8')
+                attachment_mime_type = 'image/png'  # Update mime type for OpenAI
+                pdf_doc.close()
             except Exception as e:
                 return ProcessReceiptResponse(
                     success=False,
