@@ -585,7 +585,7 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
     """
     try:
         # Initialize OpenAI client
-        client = OpenAI(api_key=db.secrets.get("OPENAI_API_KEY"))
+        client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
         
         # Create the prompt for GPT-4 Vision
         prompt = """
