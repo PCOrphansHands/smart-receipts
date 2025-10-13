@@ -7,8 +7,8 @@ beautifulsoup4
 requests
 asyncpg
 python-dotenv
-pyjwt
-jwcryptography
+pyjwt[crypto]
+cryptography
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
