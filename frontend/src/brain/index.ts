@@ -1,4 +1,4 @@
-import { API_PATH } from "../constants";
+import { API_PATH, API_HOST } from "../constants";
 import { Brain } from "./Brain";
 import type { RequestParams } from "./http-client";
 
@@ -9,7 +9,7 @@ const constructBaseUrl = (): string => {
     return `${window.location.origin}${API_PATH}`;
   }
 
-  return `https://api.databutton.com${API_PATH}`;
+  return `${API_HOST}${API_PATH}`;
 };
 
 type BaseApiParams = Omit<RequestParams, "signal" | "baseUrl" | "cancelToken">;
