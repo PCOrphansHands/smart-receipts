@@ -345,13 +345,63 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
 
         service = await get_gmail_service(user)
         
-        # Get the full message to extract HTML body
+        # Get the full message to extract HTML body and inline images
         message = service.users().messages().get(
             userId='me',
             id=request.email_id,
             format='full'
         ).execute()
-        
+
+        # Extract inline images (for CID references)
+        inline_images = {}
+
+        def extract_inline_images(payload):
+            """Recursively extract inline images from email payload"""
+            if 'parts' in payload:
+                for part in payload['parts']:
+                    # Check if this is an inline image
+                    if part.get('mimeType', '').startswith('image/'):
+                        # Get Content-ID header
+                        headers = part.get('headers', [])
+                        content_id = None
+                        for header in headers:
+                            if header['name'].lower() == 'content-id':
+                                # Content-ID is like <image001@example.com>, strip < and >
+                                content_id = header['value'].strip('<>')
+                                break
+
+                        # Get image data
+                        body = part.get('body', {})
+                        if body.get('attachmentId'):
+                            # Need to download attachment
+                            try:
+                                attachment = service.users().messages().attachments().get(
+                                    userId='me',
+                                    messageId=request.email_id,
+                                    id=body['attachmentId']
+                                ).execute()
+                                img_data = base64.urlsafe_b64decode(attachment['data'])
+                                img_base64 = base64.b64encode(img_data).decode('utf-8')
+                                mime_type = part.get('mimeType', 'image/jpeg')
+
+                                if content_id:
+                                    inline_images[content_id] = f"data:{mime_type};base64,{img_base64}"
+                            except Exception as e:
+                                print(f"Error downloading inline image: {e}")
+                        elif body.get('data'):
+                            img_data = base64.urlsafe_b64decode(body['data'])
+                            img_base64 = base64.b64encode(img_data).decode('utf-8')
+                            mime_type = part.get('mimeType', 'image/jpeg')
+
+                            if content_id:
+                                inline_images[content_id] = f"data:{mime_type};base64,{img_base64}"
+
+                    # Recursively check nested parts
+                    extract_inline_images(part)
+
+        extract_inline_images(message['payload'])
+        print(f"Found {len(inline_images)} inline images")
+
         # Extract HTML body
         def get_body(payload):
             """Recursively extract HTML body from email payload"""
@@ -376,8 +426,18 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
                     text = base64.urlsafe_b64decode(data).decode('utf-8')
                     return f'<html><body><pre style="white-space: pre-wrap; font-family: sans-serif;">{text}</pre></body></html>'
             return None
-        
+
         html_content = get_body(message['payload'])
+
+        # Replace CID references with base64 data URLs
+        if html_content and inline_images:
+            import re
+            for cid, data_url in inline_images.items():
+                # Replace cid: references
+                html_content = html_content.replace(f'cid:{cid}', data_url)
+                # Also try without cid: prefix (some emails use just the ID)
+                html_content = re.sub(f'src=["\']?{re.escape(cid)}["\']?', f'src="{data_url}"', html_content)
+            print(f"Replaced {len(inline_images)} CID references in HTML")
 
         if not html_content:
             return ProcessReceiptResponse(
