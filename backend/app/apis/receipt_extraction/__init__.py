@@ -345,12 +345,11 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
         # Optional imports for PDF conversion (not available in serverless)
         try:
             from weasyprint import HTML
-            from pdf2image import convert_from_bytes
         except ImportError:
             return ProcessReceiptResponse(
                 success=False,
                 receipt_data=None,
-                error="Email body processing not available - PDF conversion libraries not installed in serverless environment",
+                error="Email body processing not available - weasyprint not installed in serverless environment",
                 suggested_filename=None,
                 pdf_content=None
             )
@@ -408,24 +407,24 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
         
         # Store PDF content for upload
         pdf_content_base64 = base64.b64encode(pdf_data).decode('utf-8')
-        
-        # Convert PDF to image (first page)
-        images = convert_from_bytes(pdf_data, first_page=1, last_page=1)
-        
-        if not images:
+
+        # Convert PDF to image (first page) using PyMuPDF
+        try:
+            import fitz  # PyMuPDF
+            pdf_doc = fitz.open(stream=pdf_data, filetype="pdf")
+            first_page = pdf_doc[0]
+            pix = first_page.get_pixmap(dpi=150)
+            img_data = pix.tobytes("png")
+            image_base64 = base64.b64encode(img_data).decode('utf-8')
+            pdf_doc.close()
+        except Exception as e:
             return ProcessReceiptResponse(
                 success=False,
                 receipt_data=None,
-                error="Failed to convert email to image",
+                error=f"Failed to convert email PDF to image: {str(e)}",
                 suggested_filename=None,
                 pdf_content=None
             )
-        
-        # Convert PIL image to base64
-        img_buffer = io.BytesIO()
-        images[0].save(img_buffer, format='PNG')
-        img_buffer.seek(0)
-        image_base64 = base64.b64encode(img_buffer.read()).decode('utf-8')
         
         # Extract receipt data using OpenAI Vision
         client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
