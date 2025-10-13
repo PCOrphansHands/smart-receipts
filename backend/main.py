@@ -109,9 +109,17 @@ def create_app() -> FastAPI:
 
     # Configure CORS
     settings = get_settings()
+    allowed_origins = [
+        settings.FRONTEND_URL,
+        "http://localhost:5173",
+        "https://smart-receipts.vercel.app"
+    ]
+    # Filter out None values
+    allowed_origins = [origin for origin in allowed_origins if origin]
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[settings.FRONTEND_URL, "http://localhost:5173"],  # Allow frontend
+        allow_origins=allowed_origins,  # Allow frontend
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],
