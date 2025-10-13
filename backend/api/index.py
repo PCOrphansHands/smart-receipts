@@ -1,4 +1,5 @@
+from mangum import Mangum
 from main import app
 
-# Vercel expects a variable named 'app' or 'handler'
-handler = app
+# Mangum is an adapter to run ASGI apps (like FastAPI) on AWS Lambda/Vercel
+handler = Mangum(app, lifespan="off")

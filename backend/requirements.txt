@@ -3,6 +3,8 @@
 fastapi==0.115.12
 uvicorn==0.34.2
 python-multipart==0.0.9
+mangum==0.17.0
+setuptools==69.0.3
 
 # Authentication
 PyJWT==2.8.0
