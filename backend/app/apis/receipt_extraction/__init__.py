@@ -342,17 +342,8 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
         from googleapiclient.errors import HttpError
         import io
 
-        # Optional imports for PDF conversion (not available in serverless)
-        try:
-            from weasyprint import HTML
-        except ImportError:
-            return ProcessReceiptResponse(
-                success=False,
-                receipt_data=None,
-                error="Email body processing not available - weasyprint not installed in serverless environment",
-                suggested_filename=None,
-                pdf_content=None
-            )
+        # Import xhtml2pdf for HTML to PDF conversion (pure Python, no system deps)
+        from xhtml2pdf import pisa
         
         service = await get_gmail_service(user)
         
@@ -399,9 +390,19 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
                 pdf_content=None
             )
         
-        # Convert HTML to PDF
+        # Convert HTML to PDF using xhtml2pdf
         pdf_buffer = io.BytesIO()
-        HTML(string=html_content).write_pdf(pdf_buffer)
+        pisa_status = pisa.CreatePDF(html_content, dest=pdf_buffer)
+
+        if pisa_status.err:
+            return ProcessReceiptResponse(
+                success=False,
+                receipt_data=None,
+                error=f"Failed to convert email HTML to PDF: {pisa_status.err}",
+                suggested_filename=None,
+                pdf_content=None
+            )
+
         pdf_buffer.seek(0)
         pdf_data = pdf_buffer.read()
         
