@@ -1,5 +1,0 @@
-{
-  "outputDirectory": "dist",
-  "buildCommand": "yarn build",
-  "installCommand": "yarn install"
-}
