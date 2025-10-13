@@ -1,8 +1,11 @@
 [phases.setup]
-nixPkgs = ["python312", "cairo", "pango", "gdk-pixbuf", "glib", "gobject-introspection", "libffi", "fontconfig", "freefont_ttf"]
+nixPkgs = ["python312", "cairo", "pango", "gdk-pixbuf", "glib", "gobject-introspection", "atk", "gtk3", "libffi", "fontconfig", "freefont_ttf", "harfbuzz", "pkg-config"]
 
 [phases.install]
 cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "uvicorn main:app --host 0.0.0.0 --port $PORT"
 
 [phases.build]
 cmds = ["echo 'No build needed'"]
