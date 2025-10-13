@@ -56,6 +56,7 @@ def import_api_routers() -> APIRouter:
             api_module = __import__(api_module_prefix + name, fromlist=[name])
             api_router = getattr(api_module, "router", None)
             if isinstance(api_router, APIRouter):
+                print(f"  ✓ Successfully registered router: {name} with prefix: {api_router.prefix}")
                 routes.include_router(
                     api_router,
                     dependencies=(
@@ -64,8 +65,12 @@ def import_api_routers() -> APIRouter:
                         else [Depends(get_authorized_user)]
                     ),
                 )
+            else:
+                print(f"  ✗ Module {name} has no 'router' attribute or it's not an APIRouter")
         except Exception as e:
-            print(e)
+            print(f"  ✗ Error importing {name}: {e}")
+            import traceback
+            traceback.print_exc()
             continue
 
     print(routes.routes)
