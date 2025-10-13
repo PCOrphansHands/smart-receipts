@@ -10,13 +10,13 @@ from functools import lru_cache
 class Settings:
     """Application settings loaded from environment variables."""
 
-    # API Keys
-    OPENAI_API_KEY: str
-    GOOGLE_CLIENT_ID: str
-    GOOGLE_CLIENT_SECRET: str
-    DROPBOX_APP_KEY: str
-    DROPBOX_APP_SECRET: str
-    STACK_SECRET_SERVER_KEY: str
+    # API Keys (Optional - features won't work without them but app will start)
+    OPENAI_API_KEY: Optional[str] = None
+    GOOGLE_CLIENT_ID: Optional[str] = None
+    GOOGLE_CLIENT_SECRET: Optional[str] = None
+    DROPBOX_APP_KEY: Optional[str] = None
+    DROPBOX_APP_SECRET: Optional[str] = None
+    STACK_SECRET_SERVER_KEY: Optional[str] = None
 
     # Database
     DATABASE_URL: Optional[str] = None
@@ -30,13 +30,13 @@ class Settings:
 
     def __init__(self):
         """Load settings from environment variables."""
-        # API Keys (required)
-        self.OPENAI_API_KEY = self._get_required("OPENAI_API_KEY")
-        self.GOOGLE_CLIENT_ID = self._get_required("GOOGLE_CLIENT_ID")
-        self.GOOGLE_CLIENT_SECRET = self._get_required("GOOGLE_CLIENT_SECRET")
-        self.DROPBOX_APP_KEY = self._get_required("DROPBOX_APP_KEY")
-        self.DROPBOX_APP_SECRET = self._get_required("DROPBOX_APP_SECRET")
-        self.STACK_SECRET_SERVER_KEY = self._get_required("STACK_SECRET_SERVER_KEY")
+        # API Keys (optional - features won't work without them but app will start)
+        self.OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+        self.GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+        self.GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET")
+        self.DROPBOX_APP_KEY = os.getenv("DROPBOX_APP_KEY")
+        self.DROPBOX_APP_SECRET = os.getenv("DROPBOX_APP_SECRET")
+        self.STACK_SECRET_SERVER_KEY = os.getenv("STACK_SECRET_SERVER_KEY")
 
         # Database (optional - not all features need DB)
         self.DATABASE_URL = os.getenv("DATABASE_URL")
