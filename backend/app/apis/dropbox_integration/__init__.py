@@ -13,7 +13,7 @@ from app.auth import AuthorizedUser
 from app.env import Mode, mode
 from app.config import get_settings, get_secret
 
-router = APIRouter()
+router = APIRouter(prefix="/dropbox")
 
 # Helper functions for state management using database
 async def _store_oauth_state(state: str, user_id: str = None):
@@ -146,7 +146,7 @@ class DropboxReceiptsResponse(BaseModel):
     error: str | None = None
 
 
-@router.get("/dropbox/auth-url")
+@router.get("/auth-url")
 async def get_dropbox_auth_url(user: AuthorizedUser) -> DropboxAuthUrlResponse:
     """
     Generate a Dropbox OAuth authorization URL.
@@ -174,7 +174,7 @@ async def get_dropbox_auth_url(user: AuthorizedUser) -> DropboxAuthUrlResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/dropbox/callback")
+@router.get("/callback")
 async def dropbox_callback(code: str, state: str):
     """
     Handle the OAuth callback from Dropbox.
@@ -320,7 +320,7 @@ async def dropbox_callback(code: str, state: str):
         """)
 
 
-@router.get("/dropbox/status")
+@router.get("/status")
 async def get_dropbox_status(user: AuthorizedUser) -> DropboxStatusResponse:
     """
     Check if Dropbox is connected and get account information.
@@ -349,7 +349,7 @@ async def get_dropbox_status(user: AuthorizedUser) -> DropboxStatusResponse:
         )
 
 
-@router.post("/dropbox/upload")
+@router.post("/upload")
 async def upload_to_dropbox(request: UploadToDropboxRequest, user: AuthorizedUser) -> UploadToDropboxResponse:
     """
     Upload a file to Dropbox.
@@ -404,7 +404,7 @@ async def upload_to_dropbox(request: UploadToDropboxRequest, user: AuthorizedUse
             error=str(e)
         )
 
-@router.get("/dropbox/folder")
+@router.get("/folder")
 async def get_dropbox_folder(user: AuthorizedUser) -> FolderResponse:
     """
     Get the user's saved Dropbox folder preference.
@@ -427,7 +427,7 @@ async def get_dropbox_folder(user: AuthorizedUser) -> FolderResponse:
     finally:
         await conn.close()
 
-@router.post("/dropbox/folder")
+@router.post("/folder")
 async def set_dropbox_folder(request: SetFolderRequest, user: AuthorizedUser) -> FolderResponse:
     """
     Save the user's Dropbox folder preference.
@@ -457,7 +457,7 @@ async def set_dropbox_folder(request: SetFolderRequest, user: AuthorizedUser) ->
     finally:
         await conn.close()
 
-@router.get("/dropbox/receipts")
+@router.get("/receipts")
 async def list_dropbox_receipts(user: AuthorizedUser) -> DropboxReceiptsResponse:
     """
     List all receipt files from the user's Dropbox folder.

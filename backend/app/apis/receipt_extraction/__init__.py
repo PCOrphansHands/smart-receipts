@@ -14,7 +14,7 @@ from app.auth import AuthorizedUser
 from app.libs.currency_converter import convert_amount
 from app.config import get_secret
 
-router = APIRouter()
+router = APIRouter(prefix="/receipt-extraction")
 
 # Response models
 class ReceiptData(BaseModel):
