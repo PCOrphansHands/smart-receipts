@@ -120,6 +120,15 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Add root health check endpoint
+    @app.get("/")
+    async def root():
+        return {"status": "ok", "service": "Smart Receipts API"}
+
+    @app.get("/health")
+    async def health():
+        return {"status": "healthy"}
+
     app.include_router(import_api_routers())
 
     for route in app.routes:
