@@ -14,6 +14,7 @@ asyncpg==0.30.0
 
 # OpenAI
 openai==1.51.0
+httpx==0.27.0
 
 # Google APIs
 google-api-python-client==2.108.0
