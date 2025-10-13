@@ -4,10 +4,10 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import type { ReceiptEmailsResponse, AttachmentsResponse, ProcessReceiptResponse, DropboxStatusResponse } from 'types';
+import type { ReceiptEmailsResponse, AttachmentsResponse, ProcessReceiptResponse, DropboxStatusResponse, ReceiptUploadStatus } from 'types';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, FileText, CheckCircle2, Upload, FolderOpen, LogOut } from 'lucide-react';
+import { Loader2, FileText, CheckCircle2, Upload, FolderOpen, LogOut, Filter, CheckCheck } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LanguageSelector from 'components/LanguageSelector';
 import { useNavigate } from 'react-router-dom';
@@ -32,6 +32,8 @@ export default function GmailSetup() {
   const [uploadingToDropbox, setUploadingToDropbox] = useState<string | null>(null);
   const [folderPath, setFolderPath] = useState<string>('/Smart Receipts');
   const [savingFolder, setSavingFolder] = useState<boolean>(false);
+  const [uploadStatuses, setUploadStatuses] = useState<Record<string, ReceiptUploadStatus>>({});
+  const [showUploaded, setShowUploaded] = useState<boolean>(true);
   const hasCheckedStatus = useRef(false);
 
   // Check Gmail connection status on mount (only once)
@@ -57,6 +59,13 @@ export default function GmailSetup() {
     checkDropboxStatus();
   }, []);
 
+  // Load upload statuses when emails change
+  useEffect(() => {
+    if (emails && emails.emails.length > 0) {
+      loadUploadStatuses();
+    }
+  }, [emails]);
+
   const checkDropboxStatus = async () => {
     try {
       const response = await brain.get_dropbox_status();
@@ -79,6 +88,35 @@ export default function GmailSetup() {
       setFolderPath(data.folder_path);
     } catch (error) {
       console.error('Failed to load folder preference:', error);
+    }
+  };
+
+  const loadUploadStatuses = async () => {
+    if (!emails) return;
+
+    try {
+      // Generate receipt keys for all emails
+      const receiptKeys: string[] = [];
+      emails.emails.forEach(email => {
+        if (email.has_attachments && emailAttachments[email.email_id]) {
+          emailAttachments[email.email_id].attachments.forEach(attachment => {
+            receiptKeys.push(`${email.email_id}_${attachment.filename}`);
+          });
+        } else if (!email.has_attachments) {
+          receiptKeys.push(`${email.email_id}_body`);
+        }
+      });
+
+      if (receiptKeys.length === 0) return;
+
+      const response = await brain.get_upload_status({ receipt_keys: receiptKeys });
+      const data = await response.json();
+
+      if (data.success) {
+        setUploadStatuses(data.statuses || {});
+      }
+    } catch (error) {
+      console.error('Failed to load upload statuses:', error);
     }
   };
 
@@ -126,7 +164,8 @@ export default function GmailSetup() {
     try {
       const receiptData = receipt.receipt_data;
       const hasUsdConversion = receiptData?.usd_amount && receiptData?.currency && receiptData.currency.toUpperCase() !== 'USD';
-      
+      const dropboxPaths: string[] = [];
+
       // Upload original file
       const response = await brain.upload_to_dropbox({
         file_content: receipt.pdf_content,
@@ -139,33 +178,72 @@ export default function GmailSetup() {
         toast.error(data.error || 'Failed to upload to Dropbox');
         return;
       }
-      
+
+      dropboxPaths.push(data.dropbox_path);
       let message = `Uploaded to Dropbox: ${data.dropbox_path}`;
-      
+
       // If there's a USD conversion, upload a second PDF with USD amount in filename
       if (hasUsdConversion && receiptData) {
         const vendor = receiptData.vendor || 'Unknown';
         const date = receiptData.date || 'Unknown';
         const usdAmount = receiptData.usd_amount;
-        
+
         // Sanitize vendor name
         const safeVendor = vendor.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s/g, '_').substring(0, 30);
         const usdFilename = `${safeVendor}_${date}_${usdAmount}USD.pdf`;
-        
+
         const usdResponse = await brain.upload_to_dropbox({
           file_content: receipt.pdf_content, // Same PDF content, different filename
           filename: usdFilename,
           folder_path: folderPath
         });
         const usdData = await usdResponse.json();
-        
+
         if (usdData.success) {
+          dropboxPaths.push(usdData.dropbox_path);
           message = `Uploaded 2 PDFs (original + USD): ${data.dropbox_path}`;
         } else {
           message += ` (USD version failed: ${usdData.error})`;
         }
       }
-      
+
+      // Mark as uploaded in database
+      try {
+        const sourceType = receiptKey.endsWith('_body') ? 'gmail_body' : 'gmail_attachment';
+        await brain.mark_receipt_uploaded({
+          receipt_key: receiptKey,
+          dropbox_paths: dropboxPaths,
+          receipt_metadata: receiptData ? {
+            vendor: receiptData.vendor,
+            date: receiptData.date,
+            amount: receiptData.amount,
+            currency: receiptData.currency,
+          } : undefined,
+          source_type: sourceType,
+        });
+
+        // Update local state to show as uploaded
+        setUploadStatuses(prev => ({
+          ...prev,
+          [receiptKey]: {
+            receipt_key: receiptKey,
+            uploaded_to_dropbox: true,
+            upload_timestamp: new Date().toISOString(),
+            dropbox_paths: dropboxPaths,
+            receipt_metadata: receiptData ? {
+              vendor: receiptData.vendor,
+              date: receiptData.date,
+              amount: receiptData.amount,
+              currency: receiptData.currency,
+            } : undefined,
+            source_type: sourceType,
+          }
+        }));
+      } catch (trackError) {
+        console.error('Failed to track upload status:', trackError);
+        // Don't fail the upload if tracking fails
+      }
+
       toast.success(message);
     } catch (error) {
       console.error('Failed to upload to Dropbox:', error);
@@ -543,10 +621,48 @@ export default function GmailSetup() {
                     <div className="space-y-4 mt-6">
                       <div className="flex items-center justify-between">
                         <h3 className="text-lg font-semibold">{t('gmailSetup.scanSection.foundReceipts').replace('{count}', emails.count.toString())}</h3>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setShowUploaded(!showUploaded)}
+                          className="gap-2"
+                        >
+                          <Filter className="w-4 h-4" />
+                          {showUploaded ? 'Hide Uploaded' : 'Show Uploaded'}
+                        </Button>
                       </div>
                       
                       <div className="space-y-3">
-                        {emails.emails.map((email) => (
+                        {emails.emails.filter((email) => {
+                          // Generate receipt key for this email
+                          let receiptKey: string;
+                          if (email.has_attachments && emailAttachments[email.email_id]) {
+                            // For attachments, check if ANY attachment is uploaded
+                            const anyUploaded = emailAttachments[email.email_id].attachments.some(attachment => {
+                              const key = `${email.email_id}_${attachment.filename}`;
+                              return uploadStatuses[key]?.uploaded_to_dropbox;
+                            });
+                            return showUploaded || !anyUploaded;
+                          } else {
+                            // For email body
+                            receiptKey = `${email.email_id}_body`;
+                            const isUploaded = uploadStatuses[receiptKey]?.uploaded_to_dropbox;
+                            return showUploaded || !isUploaded;
+                          }
+                        }).map((email) => {
+                          // Check if this email has any uploaded receipts
+                          let hasUploadedReceipts = false;
+                          if (email.has_attachments && emailAttachments[email.email_id]) {
+                            hasUploadedReceipts = emailAttachments[email.email_id].attachments.some(attachment => {
+                              const key = `${email.email_id}_${attachment.filename}`;
+                              return uploadStatuses[key]?.uploaded_to_dropbox;
+                            });
+                          } else {
+                            const emailKey = `${email.email_id}_body`;
+                            hasUploadedReceipts = uploadStatuses[emailKey]?.uploaded_to_dropbox || false;
+                          }
+
+                          return (
                           <Card key={email.email_id} className="border-gray-200">
                             <CardContent className="p-4">
                               <div className="space-y-2">
@@ -563,6 +679,12 @@ export default function GmailSetup() {
                                     </p>
                                   </div>
                                   <div className="flex items-center gap-2 shrink-0">
+                                    {hasUploadedReceipts && (
+                                      <Badge className="bg-green-500 text-white gap-1">
+                                        <CheckCheck className="w-3 h-3" />
+                                        Uploaded
+                                      </Badge>
+                                    )}
                                     {email.has_attachments && (
                                       <Badge variant="outline">
                                         {email.attachment_count} attachment{email.attachment_count !== 1 ? 's' : ''}
@@ -624,14 +746,19 @@ export default function GmailSetup() {
                                                       {dropboxStatus?.connected && (
                                                         <Button
                                                           onClick={() => uploadToDropbox(attachmentKey)}
-                                                          disabled={uploadingToDropbox === attachmentKey}
+                                                          disabled={uploadingToDropbox === attachmentKey || uploadStatuses[attachmentKey]?.uploaded_to_dropbox}
                                                           size="sm"
-                                                          className="mt-2 w-full bg-blue-500 hover:bg-blue-600"
+                                                          className={`mt-2 w-full ${uploadStatuses[attachmentKey]?.uploaded_to_dropbox ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-500 hover:bg-blue-600'}`}
                                                         >
                                                           {uploadingToDropbox === attachmentKey ? (
                                                             <>
                                                               <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                                                               Uploading...
+                                                            </>
+                                                          ) : uploadStatuses[attachmentKey]?.uploaded_to_dropbox ? (
+                                                            <>
+                                                              <CheckCheck className="w-3 h-3 mr-1" />
+                                                              Uploaded to Dropbox
                                                             </>
                                                           ) : (
                                                             <>
@@ -713,14 +840,19 @@ export default function GmailSetup() {
                                               {dropboxStatus?.connected && (
                                                 <Button
                                                   onClick={() => uploadToDropbox(emailKey)}
-                                                  disabled={uploadingToDropbox === emailKey}
+                                                  disabled={uploadingToDropbox === emailKey || uploadStatuses[emailKey]?.uploaded_to_dropbox}
                                                   size="sm"
-                                                  className="mt-2 w-full bg-blue-500 hover:bg-blue-600"
+                                                  className={`mt-2 w-full ${uploadStatuses[emailKey]?.uploaded_to_dropbox ? 'bg-green-500 hover:bg-green-600' : 'bg-blue-500 hover:bg-blue-600'}`}
                                                 >
                                                   {uploadingToDropbox === emailKey ? (
                                                     <>
                                                       <Loader2 className="w-3 h-3 mr-1 animate-spin" />
                                                       Uploading...
+                                                    </>
+                                                  ) : uploadStatuses[emailKey]?.uploaded_to_dropbox ? (
+                                                    <>
+                                                      <CheckCheck className="w-3 h-3 mr-1" />
+                                                      Uploaded to Dropbox
                                                     </>
                                                   ) : (
                                                     <>

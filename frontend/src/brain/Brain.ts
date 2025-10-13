@@ -168,4 +168,45 @@ export class Brain<SecurityDataType = unknown> extends HttpClient<SecurityDataTy
       method: "GET",
       ...params,
     });
+
+  /**
+   * Mark Receipt as Uploaded
+   * @name mark_receipt_uploaded
+   * @request POST:/upload-tracking/mark-uploaded
+   */
+  mark_receipt_uploaded = (data: { receipt_key: string; dropbox_paths: string[]; receipt_metadata?: any; source_type?: string }, params: RequestParams = {}) =>
+    this.request<any, any>({
+      path: `/upload-tracking/mark-uploaded`,
+      method: "POST",
+      body: data,
+      type: "application/json",
+      ...params,
+    });
+
+  /**
+   * Get Upload Status
+   * @name get_upload_status
+   * @request POST:/upload-tracking/get-status
+   */
+  get_upload_status = (data: { receipt_keys: string[] }, params: RequestParams = {}) =>
+    this.request<any, any>({
+      path: `/upload-tracking/get-status`,
+      method: "POST",
+      body: data,
+      type: "application/json",
+      ...params,
+    });
+
+  /**
+   * List Uploaded Receipts
+   * @name list_uploaded_receipts
+   * @request GET:/upload-tracking/list
+   */
+  list_uploaded_receipts = (query?: { include_uploaded?: boolean; include_not_uploaded?: boolean }, params: RequestParams = {}) =>
+    this.request<any, any>({
+      path: `/upload-tracking/list`,
+      method: "GET",
+      query: query,
+      ...params,
+    });
 }

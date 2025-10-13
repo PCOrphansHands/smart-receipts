@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Upload, FileText, CheckCircle, XCircle, Loader2, Camera, LogOut } from 'lucide-react';
+import { Upload, FileText, CheckCircle, XCircle, Loader2, Camera, LogOut, Filter, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
 import brain from 'brain';
-import type { UploadedReceiptResponse } from 'types';
+import type { UploadedReceiptResponse, ReceiptUploadStatus } from 'types';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import LanguageSelector from 'components/LanguageSelector';
@@ -15,9 +16,11 @@ import { auth } from 'app/auth';
 interface ProcessedFile {
   id: string;
   originalName: string;
-  status: 'processing' | 'success' | 'error';
+  status: 'processing' | 'success' | 'error' | 'uploaded';
   data?: UploadedReceiptResponse;
   error?: string;
+  uploadTimestamp?: string;
+  dropboxPaths?: string[];
 }
 
 export default function UploadReceipts() {
@@ -27,6 +30,7 @@ export default function UploadReceipts() {
   const [isUploading, setIsUploading] = useState(false);
   const [folderPath, setFolderPath] = useState<string>('/Smart_Receipts');
   const [showCamera, setShowCamera] = useState(false);
+  const [showUploaded, setShowUploaded] = useState<boolean>(true);
   const navigate = useNavigate();
 
   // Fetch user's saved folder preference on mount
@@ -203,7 +207,7 @@ export default function UploadReceipts() {
 
   const uploadAllToDropbox = async () => {
     const successfulFiles = files.filter(f => f.status === 'success' && f.data?.pdf_content);
-    
+
     if (successfulFiles.length === 0) {
       toast.error('No processed files to upload');
       return;
@@ -217,7 +221,8 @@ export default function UploadReceipts() {
       try {
         const receiptData = file.data!.receipt_data;
         const hasUsdConversion = receiptData?.usd_amount && receiptData?.currency && receiptData.currency.toUpperCase() !== 'USD';
-        
+        const dropboxPaths: string[] = [];
+
         // Upload original file
         const originalFilename = file.data!.suggested_filename || file.originalName;
         const response = await brain.upload_to_dropbox({
@@ -232,27 +237,29 @@ export default function UploadReceipts() {
           toast.error(`Failed to upload ${originalFilename}`);
           continue;
         }
-        
+
+        dropboxPaths.push(result.dropbox_path);
         uploaded++;
-        
+
         // If there's a USD conversion, upload a second PDF with USD amount in filename
         if (hasUsdConversion && receiptData) {
           const vendor = receiptData.vendor || 'Unknown';
           const date = receiptData.date || 'Unknown';
           const usdAmount = receiptData.usd_amount;
-          
+
           // Sanitize vendor name
           const safeVendor = vendor.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s/g, '_').substring(0, 30);
           const usdFilename = `${safeVendor}_${date}_${usdAmount}USD.pdf`;
-          
+
           const usdResponse = await brain.upload_to_dropbox({
             filename: usdFilename,
             file_content: file.data!.pdf_content!, // Same PDF content, different filename
             folder_path: folderPath,
           });
           const usdResult = await usdResponse.json();
-          
+
           if (usdResult.success) {
+            dropboxPaths.push(usdResult.dropbox_path);
             uploaded++;
             console.log(`Uploaded USD version: ${usdFilename}`);
           } else {
@@ -260,10 +267,39 @@ export default function UploadReceipts() {
             toast.error(`Failed to upload USD version of ${file.originalName}`);
           }
         }
-        
-        // Remove successfully uploaded file from list
-        setFiles(prev => prev.filter(f => f.id !== file.id));
-        
+
+        // Mark as uploaded in database
+        try {
+          await brain.mark_receipt_uploaded({
+            receipt_key: file.id,
+            dropbox_paths: dropboxPaths,
+            receipt_metadata: receiptData ? {
+              vendor: receiptData.vendor,
+              date: receiptData.date,
+              amount: receiptData.amount,
+              currency: receiptData.currency,
+            } : undefined,
+            source_type: 'upload',
+          });
+
+          // Update file status to uploaded
+          setFiles(prev => prev.map(f => f.id === file.id ? {
+            ...f,
+            status: 'uploaded',
+            uploadTimestamp: new Date().toISOString(),
+            dropboxPaths: dropboxPaths,
+          } : f));
+        } catch (trackError) {
+          console.error('Failed to track upload status:', trackError);
+          // Still mark as uploaded locally even if tracking fails
+          setFiles(prev => prev.map(f => f.id === file.id ? {
+            ...f,
+            status: 'uploaded',
+            uploadTimestamp: new Date().toISOString(),
+            dropboxPaths: dropboxPaths,
+          } : f));
+        }
+
       } catch (error) {
         failed++;
         console.error('Upload error:', error);
@@ -271,7 +307,7 @@ export default function UploadReceipts() {
     }
 
     setIsUploading(false);
-    
+
     if (uploaded > 0) {
       toast.success(`Uploaded ${uploaded} file(s) to Dropbox!`);
     }
@@ -396,11 +432,20 @@ export default function UploadReceipts() {
                   </CardDescription>
                 </div>
                 <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowUploaded(!showUploaded)}
+                    className="gap-2"
+                  >
+                    <Filter className="w-4 h-4" />
+                    {showUploaded ? 'Hide Uploaded' : 'Show Uploaded'}
+                  </Button>
                   <Button variant="outline" onClick={clearAll} size="sm" className="flex-1 sm:flex-none">
                     {t('upload.actions.clearAll')}
                   </Button>
-                  <Button 
-                    onClick={uploadAllToDropbox} 
+                  <Button
+                    onClick={uploadAllToDropbox}
                     disabled={isUploading || !files.some(f => f.status === 'success')}
                     size="sm"
                     className="flex-1 sm:flex-none"
@@ -416,9 +461,9 @@ export default function UploadReceipts() {
             </CardHeader>
             <CardContent>
               <div className="space-y-3">
-                {files.map(file => (
-                  <div 
-                    key={file.id} 
+                {files.filter(file => showUploaded || file.status !== 'uploaded').map(file => (
+                  <div
+                    key={file.id}
                     className="border rounded-lg p-4 flex items-start justify-between bg-white"
                   >
                     <div className="flex items-start gap-3 flex-1">
@@ -431,6 +476,12 @@ export default function UploadReceipts() {
                           )}
                           {file.status === 'success' && (
                             <CheckCircle className="w-4 h-4 text-green-500" />
+                          )}
+                          {file.status === 'uploaded' && (
+                            <Badge className="bg-green-500 text-white gap-1">
+                              <CheckCheck className="w-3 h-3" />
+                              Uploaded
+                            </Badge>
                           )}
                           {file.status === 'error' && (
                             <XCircle className="w-4 h-4 text-red-500" />
@@ -469,10 +520,35 @@ export default function UploadReceipts() {
                           </div>
                         )}
                         
+                        {file.status === 'uploaded' && file.data?.receipt_data && (
+                          <div className="mt-2 space-y-1 text-sm">
+                            <p className="text-green-600 font-medium">✓ Uploaded to Dropbox</p>
+                            <p className="text-gray-600">
+                              <span className="font-medium">Vendor:</span> {file.data.receipt_data.vendor || 'N/A'}
+                            </p>
+                            <p className="text-gray-600">
+                              <span className="font-medium">Date:</span> {file.data.receipt_data.date || 'N/A'}
+                            </p>
+                            <p className="text-gray-600">
+                              <span className="font-medium">Amount:</span> {file.data.receipt_data.currency} {file.data.receipt_data.amount || 'N/A'}
+                            </p>
+                            {file.dropboxPaths && file.dropboxPaths.length > 0 && (
+                              <p className="text-blue-600 text-xs">
+                                📁 {file.dropboxPaths.length} file{file.dropboxPaths.length > 1 ? 's' : ''} uploaded
+                              </p>
+                            )}
+                            {file.uploadTimestamp && (
+                              <p className="text-gray-500 text-xs">
+                                Uploaded: {new Date(file.uploadTimestamp).toLocaleString()}
+                              </p>
+                            )}
+                          </div>
+                        )}
+
                         {file.status === 'error' && (
                           <p className="text-red-600 text-sm mt-1">{file.error}</p>
                         )}
-                        
+
                         {file.status === 'processing' && (
                           <p className="text-gray-500 text-sm mt-1">Extracting receipt data...</p>
                         )}
