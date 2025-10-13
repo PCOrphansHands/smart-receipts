@@ -107,20 +107,12 @@ def create_app() -> FastAPI:
     """Create the app. This is called by uvicorn with the factory option to construct the app object."""
     app = FastAPI(title="Smart Receipts API", version="1.0.0")
 
-    # Configure CORS
+    # Configure CORS - allow all origins temporarily for debugging
     settings = get_settings()
-    allowed_origins = [
-        settings.FRONTEND_URL,
-        "http://localhost:5173",
-        "https://smart-receipts.vercel.app"
-    ]
-    # Filter out None values
-    allowed_origins = [origin for origin in allowed_origins if origin]
-
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=allowed_origins,  # Allow frontend
-        allow_credentials=True,
+        allow_origins=["*"],  # Allow all origins temporarily
+        allow_credentials=False,  # Must be False when allow_origins is ["*"]
         allow_methods=["*"],
         allow_headers=["*"],
     )
