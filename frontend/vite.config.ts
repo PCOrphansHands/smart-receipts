@@ -18,10 +18,10 @@ export default defineConfig({
 	resolve: {
 		alias: [
 			// More specific paths must come first
-			{ find: /^@\/components\/ui\/(.*)$/, replacement: path.resolve(__dirname, "./src/extensions/shadcn/components/$1") },
-			{ find: /^@\/components\/hooks\/(.*)$/, replacement: path.resolve(__dirname, "./src/extensions/shadcn/hooks/$1") },
-			{ find: /^@\/hooks\/(.*)$/, replacement: path.resolve(__dirname, "./src/extensions/shadcn/hooks/$1") },
-			{ find: /^@\/lib\/(.*)$/, replacement: path.resolve(__dirname, "./src/lib/$1") },
+			{ find: /^@\/components\/ui\/(.*)$/, replacement: path.resolve(__dirname, "./src/extensions/shadcn/components/$1.tsx") },
+			{ find: /^@\/components\/hooks\/(.*)$/, replacement: path.resolve(__dirname, "./src/extensions/shadcn/hooks/$1.ts") },
+			{ find: /^@\/hooks\/(.*)$/, replacement: path.resolve(__dirname, "./src/extensions/shadcn/hooks/$1.ts") },
+			{ find: "@/lib/utils", replacement: path.resolve(__dirname, "./src/lib/utils.ts") },
 			{ find: "app/auth", replacement: path.resolve(__dirname, "./src/app/auth") },
 			{ find: "brain", replacement: path.resolve(__dirname, "./src/brain") },
 			{ find: "types", replacement: path.resolve(__dirname, "./src/brain/data-contracts.ts") },
