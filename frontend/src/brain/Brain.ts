@@ -1,5 +1,5 @@
 import { HandleHealthzData } from "./data-contracts";
-import { HttpClient, RequestParams } from "./http-client";
+import { HttpClient, RequestParams, ContentType } from "./http-client";
 
 export class Brain<SecurityDataType = unknown> extends HttpClient<SecurityDataType> {
   /**
@@ -229,18 +229,14 @@ export class Brain<SecurityDataType = unknown> extends HttpClient<SecurityDataTy
    * @name process_uploaded_receipt
    * @request POST:/receipt-extraction/process-uploaded-receipt
    */
-  process_uploaded_receipt = (data: { file: File }, params: RequestParams = {}) => {
-    const formData = new FormData();
-    formData.append('file', data.file);
-
-    return this.request<any, any>({
+  process_uploaded_receipt = (data: { file: File }, params: RequestParams = {}) =>
+    this.request<any, any>({
       path: `/receipt-extraction/process-uploaded-receipt`,
       method: "POST",
-      body: formData,
-      type: "multipart/form-data",
+      body: data,
+      type: ContentType.FormData,
       ...params,
     });
-  };
 
   /**
    * Detect Language
