@@ -1,0 +1,84 @@
+@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@800&family=Open+Sauce+One:wght@400;500;600&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
+@layer base {
+  :root {
+    --background: 45 40% 92%; /* #F0EBD6 cream background */
+    --foreground: 215 20% 20%;
+    --card: 0 0% 100%;
+    --card-foreground: 215 20% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 20% 20%;
+    --primary: 181 100% 35%; /* #00AFB2 aqua */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 22 100% 50%; /* #FF6100 orange */
+    --secondary-foreground: 0 0% 98%;
+    --muted: 210 20% 94%;
+    --muted-foreground: 215 12% 50%;
+    --accent: 181 100% 35%; /* #00AFB2 aqua */
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 210 20% 88%;
+    --input: 210 20% 88%;
+    --ring: 181 100% 35%; /* #00AFB2 aqua */
+    --radius: 0.5rem;
+    --chart-1: 181 100% 35%; /* #00AFB2 aqua */
+    --chart-2: 22 100% 50%; /* #FF6100 orange */
+    --chart-3: 195 60% 45%;
+    --chart-4: 40 75% 58%;
+    --chart-5: 160 50% 48%;
+  }
+
+  .dark {
+    --background: 220 15% 12%;
+    --foreground: 0 0% 95%;
+    --card: 220 15% 15%;
+    --card-foreground: 0 0% 95%;
+    --popover: 220 15% 15%;
+    --popover-foreground: 0 0% 95%;
+    --primary: 181 100% 35%; /* #00AFB2 aqua */
+    --primary-foreground: 0 0% 98%;
+    --secondary: 22 100% 50%; /* #FF6100 orange */
+    --secondary-foreground: 0 0% 98%;
+    --muted: 220 12% 22%;
+    --muted-foreground: 215 10% 60%;
+    --accent: 181 100% 35%; /* #00AFB2 aqua */
+    --accent-foreground: 0 0% 98%;
+    --destructive: 0 62% 45%;
+    --destructive-foreground: 0 0% 98%;
+    --border: 220 12% 22%;
+    --input: 220 12% 22%;
+    --ring: 181 100% 35%; /* #00AFB2 aqua */
+    --chart-1: 181 100% 35%; /* #00AFB2 aqua */
+    --chart-2: 22 100% 50%; /* #FF6100 orange */
+    --chart-3: 270 60% 60%;
+    --chart-4: 40 75% 58%;
+    --chart-5: 160 50% 55%;
+  }
+}
+
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Open Sauce One', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+    font-weight: 400;
+    font-feature-settings: "rlig" 1, "calt" 1, "tnum" 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 800;
+    letter-spacing: -0.01em;
+  }
+}

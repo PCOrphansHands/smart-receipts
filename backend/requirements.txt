@@ -1,0 +1,35 @@
+# Smart Receipts Backend Requirements
+# Core API dependencies
+fastapi==0.115.12
+uvicorn==0.34.2
+python-multipart==0.0.9
+setuptools>=65.0.0
+
+# Authentication
+PyJWT==2.8.0
+cryptography==41.0.7
+
+# Database
+asyncpg==0.30.0
+
+# OpenAI
+openai==1.51.0
+httpx==0.27.0
+
+# Google APIs
+google-api-python-client==2.108.0
+google-auth-httplib2==0.2.0
+google-auth-oauthlib==1.2.0
+
+# Dropbox
+dropbox==11.36.2
+
+# Utilities
+requests==2.32.3
+beautifulsoup4==4.12.3
+PyPDF2==3.0.1
+pillow==10.4.0
+PyMuPDF==1.24.5
+
+# HTML to PDF conversion with Playwright
+playwright==1.48.0

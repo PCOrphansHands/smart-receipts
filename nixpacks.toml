@@ -1,0 +1,15 @@
+[phases.setup]
+nixPkgs = ["python312", "cairo", "pkg-config"]
+aptPkgs = ["libcairo2-dev"]
+
+[phases.install]
+cmds = ["pip install -r requirements.txt"]
+
+[start]
+cmd = "uvicorn main:app --host 0.0.0.0 --port $PORT"
+
+[phases.build]
+cmds = ["echo 'No build needed'"]
+
+[start]
+cmd = "uvicorn main:app --host 0.0.0.0 --port $PORT"
