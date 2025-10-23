@@ -13,6 +13,7 @@ import LanguageSelector from 'components/LanguageSelector';
 import { useNavigate } from 'react-router-dom';
 import { auth } from 'app/auth';
 import { useUserGuardContext } from 'app/auth/UserGuard';
+import { authLogger } from 'utils/logger';
 
 export default function GmailSetup() {
   const { t } = useTranslation();
@@ -262,57 +263,56 @@ export default function GmailSetup() {
         return;
       }
       
-      console.log('Starting Gmail auth...');
+      authLogger.debug('Starting Gmail OAuth flow');
       setLoading(true);
-      console.log('Calling brain.start_gmail_auth()...');
-      
+
       const response = await brain.start_gmail_auth();
-      console.log('Got response:', response.status);
-      
+      authLogger.debug('Got Gmail auth response', { status: response.status });
+
       // Check for auth errors
       if (response.status === 401) {
-        console.log('Got 401, session expired');
+        authLogger.warn('Session expired during Gmail auth');
         toast.error('Your session has expired. Please log in again.');
         navigate('/auth/sign-in');
         return;
       }
-      
+
       if (!response.ok) {
-        console.error('Response not ok:', response.status);
+        authLogger.error('Gmail auth failed', { status: response.status });
         throw new Error(`Failed to start Gmail auth: ${response.status}`);
       }
-      
+
       const data = await response.json();
-      console.log('Got auth URL:', data.auth_url);
-      console.log('Opening popup window...');
-      
+      authLogger.debug('Opening Gmail OAuth popup', { authUrl: data.auth_url });
+
       // Open Gmail OAuth in a popup window
       const popup = window.open(data.auth_url, 'gmailAuth', 'width=600,height=800,scrollbars=yes');
       if (!popup) {
-        console.error('Popup was blocked!');
+        authLogger.error('Popup window was blocked by browser');
         throw new Error('Popup was blocked. Please allow popups for this site.');
       }
-      
-      console.log('Popup opened successfully');
-      
+
+      authLogger.info('Gmail OAuth popup opened successfully');
+
       // Monitor popup closure
       const checkPopup = setInterval(() => {
         if (popup.closed) {
-          console.log('Popup was closed');
+          authLogger.debug('Gmail OAuth popup closed');
           clearInterval(checkPopup);
           setLoading(false);
         }
       }, 500);
-      
+
     } catch (error) {
-      console.error('Gmail auth start failed:', error);
+      authLogger.error('Gmail authentication failed', error);
+
       // Check if it's a 401 error from the response
       if (error instanceof Response && error.status === 401) {
-        console.log('Caught 401 error, redirecting to login');
+        authLogger.warn('401 error caught, redirecting to login');
         toast.error('Your session has expired. Please log in again.');
         navigate('/auth/sign-in');
       } else if (typeof error === 'object' && error !== null && 'status' in error && error.status === 401) {
-        console.log('Caught 401 in error object, redirecting to login');
+        authLogger.warn('401 status in error object, redirecting to login');
         toast.error('Your session has expired. Please log in again.');
         navigate('/auth/sign-in');
       } else {

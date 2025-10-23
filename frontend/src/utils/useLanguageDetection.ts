@@ -33,7 +33,14 @@ export const useLanguageDetection = () => {
           }
         }
       } catch (error) {
-        console.error('Failed to detect language from IP:', error);
+        // Silently fall back to English when backend is unavailable
+        // This is expected during development when backend isn't running
+        if (import.meta.env.DEV) {
+          console.info('Language auto-detection unavailable (backend offline). Using English.');
+        } else {
+          console.error('Failed to detect language from IP:', error);
+        }
+
         // Fallback to English on error
         if (!savedLanguage) {
           await i18n.changeLanguage('en');

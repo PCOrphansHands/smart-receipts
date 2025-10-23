@@ -12,6 +12,7 @@ import LanguageSelector from 'components/LanguageSelector';
 import CameraCapture from 'components/CameraCapture';
 import jsPDF from 'jspdf';
 import { auth } from 'app/auth';
+import { apiLogger, uiLogger } from 'utils/logger';
 
 interface ProcessedFile {
   id: string;
@@ -43,7 +44,7 @@ export default function UploadReceipts() {
           setFolderPath(data.folder_path);
         }
       } catch (error) {
-        console.error('Error fetching folder preference:', error);
+        apiLogger.error('Failed to fetch folder preference', error);
       }
     };
     fetchFolderPreference();
@@ -116,9 +117,9 @@ export default function UploadReceipts() {
           toast.error(`Failed to process ${file.name}: ${data.error}`);
         }
       } catch (error) {
-        console.error('Error processing file:', error);
-        setFiles(prev => prev.map(f => 
-          f.id === fileId 
+        apiLogger.error('Failed to process uploaded file', { fileName: file.name, error });
+        setFiles(prev => prev.map(f =>
+          f.id === fileId
             ? { ...f, status: 'error', error: 'Failed to upload file' }
             : f
         ));
@@ -195,9 +196,9 @@ export default function UploadReceipts() {
 
       toast.success(`Captured and processed: ${suggestedFilename}`);
     } catch (error) {
-      console.error('Error processing camera image:', error);
-      setFiles(prev => prev.map(f => 
-        f.id === fileId 
+      apiLogger.error('Failed to process camera image', error);
+      setFiles(prev => prev.map(f =>
+        f.id === fileId
           ? { ...f, status: 'error', error: error instanceof Error ? error.message : 'Failed to process image' }
           : f
       ));
@@ -261,7 +262,7 @@ export default function UploadReceipts() {
           if (usdResult.success) {
             dropboxPaths.push(usdResult.dropbox_path);
             uploaded++;
-            console.log(`Uploaded USD version: ${usdFilename}`);
+            uiLogger.debug(`Uploaded USD version: ${usdFilename}`);
           } else {
             failed++;
             toast.error(`Failed to upload USD version of ${file.originalName}`);
@@ -290,7 +291,7 @@ export default function UploadReceipts() {
             dropboxPaths: dropboxPaths,
           } : f));
         } catch (trackError) {
-          console.error('Failed to track upload status:', trackError);
+          apiLogger.warn('Failed to track upload status in database', trackError);
           // Still mark as uploaded locally even if tracking fails
           setFiles(prev => prev.map(f => f.id === file.id ? {
             ...f,
@@ -302,7 +303,7 @@ export default function UploadReceipts() {
 
       } catch (error) {
         failed++;
-        console.error('Upload error:', error);
+        apiLogger.error('Failed to upload file to Dropbox', { fileName: file.originalName, error });
       }
     }
 
@@ -398,15 +399,17 @@ export default function UploadReceipts() {
                     accept=".pdf,.jpg,.jpeg,.png"
                     onChange={handleFileSelect}
                     className="hidden"
+                    aria-label="Upload receipt files (PDF, JPG, PNG)"
                   />
                   <label htmlFor="file-upload">
                     <Button variant="outline" className="cursor-pointer" asChild>
                       <span>{t('upload.dropzone.browse')}</span>
                     </Button>
                   </label>
-                  <Button 
+                  <Button
                     onClick={() => setShowCamera(true)}
                     className="bg-brand-primary hover:bg-brand-primary/90"
+                    aria-label="Open camera to take photo of receipt"
                   >
                     <Camera className="w-4 h-4 mr-2" />
                     {t('camera.takePhoto', 'Take Photo')}

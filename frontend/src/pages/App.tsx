@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { auth } from 'app/auth';
+import { apiLogger } from 'utils/logger';
 
 export default function App() {
   const navigate = useNavigate();
@@ -26,50 +27,27 @@ export default function App() {
   useEffect(() => {
     const gmailParam = searchParams.get('gmail');
     const dropboxParam = searchParams.get('dropbox');
-    
+
+    // Handle Gmail OAuth callback
     if (gmailParam === 'success') {
       toast.success('Gmail connected successfully!');
       checkGmailStatus(); // Refresh status
-      // Clean URL
-      window.history.replaceState({}, '', window.location.pathname);
+      navigate('/', { replace: true });
     } else if (gmailParam === 'error') {
       toast.error('Failed to connect Gmail');
-      window.history.replaceState({}, '', window.location.pathname);
+      navigate('/', { replace: true });
     }
-    
+
+    // Handle Dropbox OAuth callback
     if (dropboxParam === 'success') {
       toast.success('Dropbox connected successfully!');
       checkDropboxStatus(); // Refresh status
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (dropboxParam === 'error') {
-      toast.error('Failed to connect Dropbox');
-      window.history.replaceState({}, '', window.location.pathname);
-    }
-  }, [searchParams]);
-
-  // Check for OAuth callback on mount
-  useEffect(() => {
-    const gmailParam = searchParams.get('gmail');
-    const dropboxParam = searchParams.get('dropbox');
-    
-    if (gmailParam === 'success') {
-      toast.success('Gmail connected successfully!');
-      loadConnectionStatus();
-      navigate('/', { replace: true });
-    } else if (gmailParam === 'error') {
-      toast.error('Failed to connect Gmail');
-      navigate('/', { replace: true });
-    }
-    
-    if (dropboxParam === 'success') {
-      toast.success('Dropbox connected successfully!');
-      loadConnectionStatus();
       navigate('/', { replace: true });
     } else if (dropboxParam === 'error') {
       toast.error('Failed to connect Dropbox');
       navigate('/', { replace: true });
     }
-  }, [searchParams]);
+  }, [searchParams, navigate]);
 
   // Auto-load receipts when Dropbox is connected
   useEffect(() => {
@@ -96,7 +74,7 @@ export default function App() {
       const data = await response.json();
       setGmailStatus(data);
     } catch (error) {
-      console.error("Error checking Gmail status:", error);
+      apiLogger.error("Failed to check Gmail status", error);
     }
   };
 
@@ -106,7 +84,7 @@ export default function App() {
       const statusData = await statusResponse.json();
       setDropboxStatus(statusData);
     } catch (error) {
-      console.error("Error checking Dropbox status:", error);
+      apiLogger.error("Failed to check Dropbox status", error);
     }
   };
 
@@ -117,7 +95,7 @@ export default function App() {
       const receiptsDataResult = await receiptsResponse.json();
       setReceiptsData(receiptsDataResult);
     } catch (error) {
-      console.error("Error loading receipts:", error);
+      apiLogger.error("Failed to load receipts from Dropbox", error);
       toast.error('Failed to load receipts');
     } finally {
       setLoading(false);
@@ -133,7 +111,7 @@ export default function App() {
         window.location.href = data.auth_url;
       }
     } catch (error) {
-      console.error('Gmail auth failed:', error);
+      apiLogger.error('Gmail authentication failed', error);
       toast.error('Failed to start Gmail authentication');
     }
   };
@@ -147,7 +125,7 @@ export default function App() {
         window.location.href = data.auth_url;
       }
     } catch (error) {
-      console.error('Dropbox auth failed:', error);
+      apiLogger.error('Dropbox authentication failed', error);
       toast.error('Failed to start Dropbox authentication');
     }
   };
@@ -192,8 +170,13 @@ export default function App() {
             </div>
             <div className="flex items-center gap-2 sm:gap-3">
               <LanguageSelector />
-              <Button variant="outline" size="sm" onClick={() => auth.signOut()}>
-                <LogOut className="w-4 h-4 sm:mr-2" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => auth.signOut()}
+                aria-label={t('common.signOut', 'Sign out')}
+              >
+                <LogOut className="w-4 h-4 sm:mr-2" aria-hidden="true" />
                 <span className="hidden sm:inline">{t('common.signOut')}</span>
               </Button>
             </div>

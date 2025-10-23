@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { auth, supabase } from 'app/auth';
 import { toast } from 'sonner';
+import { authLogger } from 'utils/logger';
 
 export default function SignIn() {
   const navigate = useNavigate();
@@ -30,7 +31,7 @@ export default function SignIn() {
     try {
       await auth.signInWithGoogle();
     } catch (error) {
-      console.error('Sign in error:', error);
+      authLogger.error('Google sign-in failed', error);
       toast.error('Failed to sign in with Google');
     }
   };

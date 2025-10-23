@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
+import { uiLogger } from 'utils/logger';
 
 export interface Props {
   onCapture: (imageData: string) => void;
@@ -41,7 +42,7 @@ export default function CameraCapture({ onCapture, onClose }: Props) {
         setIsCameraReady(true);
       }
     } catch (error) {
-      console.error('Error accessing camera:', error);
+      uiLogger.error('Failed to access camera', error);
       toast.error('Unable to access camera. Please check permissions.');
     }
   };

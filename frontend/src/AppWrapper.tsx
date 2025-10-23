@@ -1,4 +1,5 @@
 import { RouterProvider } from "react-router-dom";
+import { HelmetProvider } from "react-helmet-async";
 import { Head } from "./internal-components/Head";
 import { OuterErrorBoundary } from "./prod-components/OuterErrorBoundary";
 import { router } from "./router";
@@ -8,10 +9,12 @@ import { DEFAULT_THEME } from "./constants/default-theme";
 export const AppWrapper = () => {
   return (
     <OuterErrorBoundary>
-      <ThemeProvider defaultTheme={DEFAULT_THEME}>
-        <RouterProvider router={router} />
-        <Head />
-      </ThemeProvider>
+      <HelmetProvider>
+        <ThemeProvider defaultTheme={DEFAULT_THEME}>
+          <RouterProvider router={router} />
+          <Head />
+        </ThemeProvider>
+      </HelmetProvider>
     </OuterErrorBoundary>
   );
 };
