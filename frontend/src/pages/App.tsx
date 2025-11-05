@@ -256,7 +256,7 @@ export default function App() {
               </div>
             </div>
             
-            {/* View Dropbox */}
+            {/* Dropbox Setup */}
             <div className="bg-white rounded-lg border-2 border-gray-200 p-6 hover:border-brand-secondary hover:shadow-md transition-all cursor-pointer">
               <div className="flex items-start gap-4">
                 <div className="p-3 bg-green-50 rounded-lg">
@@ -264,30 +264,29 @@ export default function App() {
                 </div>
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
-                    <h3 className="text-base font-medium text-gray-900">{t('home.quickActions.viewDropbox.title')}</h3>
+                    <h3 className="text-base font-medium text-gray-900">Dropbox Setup</h3>
                   </div>
                   <p className="text-sm text-gray-600 mb-3">
-                    {dropboxStatus?.connected 
-                      ? t('home.quickActions.viewDropbox.descriptionConnected')
-                      : t('home.quickActions.viewDropbox.descriptionNotConnected')}
+                    {dropboxStatus?.connected
+                      ? 'Manage your Dropbox connection and settings'
+                      : 'Connect your Dropbox to save receipts automatically'}
                   </p>
                   {!dropboxStatus?.connected ? (
                     <Button
-                      onClick={startDropboxAuth}
+                      onClick={() => navigate('/dropbox-setup')}
                       size="sm"
                       className="w-full"
                     >
-                      {t('home.quickActions.viewDropbox.connectButton')}
+                      Connect Dropbox
                     </Button>
                   ) : (
                     <Button
-                      onClick={() => window.open(`https://www.dropbox.com/home${receiptsData?.folder_path || '/Smart Receipts'}`, '_blank')}
+                      onClick={() => navigate('/dropbox-setup')}
                       variant="outline"
                       size="sm"
                       className="w-full"
                     >
-                      <span>{t('home.quickActions.viewDropbox.openButton')}</span>
-                      <ExternalLink className="w-3 h-3 ml-1" />
+                      Manage Settings
                     </Button>
                   )}
                 </div>

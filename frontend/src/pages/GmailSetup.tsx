@@ -31,8 +31,6 @@ export default function GmailSetup() {
   const [processingEmailBody, setProcessingEmailBody] = useState<string | null>(null);
   const [dropboxStatus, setDropboxStatus] = useState<DropboxStatusResponse | null>(null);
   const [uploadingToDropbox, setUploadingToDropbox] = useState<string | null>(null);
-  const [folderPath, setFolderPath] = useState<string>('/Smart Receipts');
-  const [savingFolder, setSavingFolder] = useState<boolean>(false);
   const [uploadStatuses, setUploadStatuses] = useState<Record<string, ReceiptUploadStatus>>({});
   const [showUploaded, setShowUploaded] = useState<boolean>(true);
   const hasCheckedStatus = useRef(false);
@@ -72,23 +70,8 @@ export default function GmailSetup() {
       const response = await brain.get_dropbox_status();
       const data = await response.json();
       setDropboxStatus(data);
-      
-      // Load folder preference if connected
-      if (data.connected) {
-        loadFolderPreference();
-      }
     } catch (error) {
       console.error('Failed to check Dropbox status:', error);
-    }
-  };
-
-  const loadFolderPreference = async () => {
-    try {
-      const response = await brain.get_dropbox_folder();
-      const data = await response.json();
-      setFolderPath(data.folder_path);
-    } catch (error) {
-      console.error('Failed to load folder preference:', error);
     }
   };
 
@@ -118,65 +101,6 @@ export default function GmailSetup() {
       }
     } catch (error) {
       console.error('Failed to load upload statuses:', error);
-    }
-  };
-
-  const saveFolderPreference = async (newPath: string) => {
-    setSavingFolder(true);
-    try {
-      const response = await brain.set_dropbox_folder({ folder_path: newPath });
-      const data = await response.json();
-      setFolderPath(data.folder_path);
-      toast.success('Folder preference saved');
-    } catch (error) {
-      console.error('Failed to save folder preference:', error);
-      toast.error('Failed to save folder preference');
-    } finally {
-      setSavingFolder(false);
-    }
-  };
-
-  const connectDropbox = async () => {
-    try {
-      setLoading(true);
-      const response = await brain.get_dropbox_auth_url();
-      const data = await response.json();
-      // Open Dropbox OAuth in a popup window
-      const popup = window.open(data.auth_url, '_blank', 'width=600,height=800');
-      if (!popup) {
-        throw new Error('Failed to open popup window');
-      }
-    } catch (error) {
-      console.error('Dropbox auth start failed:', error);
-      toast.error('Failed to start Dropbox authentication');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const disconnectDropbox = async () => {
-    if (!confirm('Are you sure you want to disconnect your Dropbox account? You can reconnect anytime.')) {
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const response = await brain.disconnect_dropbox();
-      const data = await response.json();
-
-      if (data.success) {
-        toast.success('Dropbox disconnected successfully');
-        setDropboxStatus({ connected: false, account_name: null });
-        // Reload page to reset state
-        window.location.reload();
-      } else {
-        toast.error('Failed to disconnect Dropbox');
-      }
-    } catch (error) {
-      console.error('Dropbox disconnect failed:', error);
-      toast.error('Failed to disconnect Dropbox');
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -216,6 +140,11 @@ export default function GmailSetup() {
 
     setUploadingToDropbox(receiptKey);
     try {
+      // Fetch current folder preference
+      const folderResponse = await brain.get_dropbox_folder();
+      const folderData = await folderResponse.json();
+      const folderPath = folderData.folder_path || '/Smart Receipts';
+
       const receiptData = receipt.receipt_data;
       const hasUsdConversion = receiptData?.usd_amount && receiptData?.currency && receiptData.currency.toUpperCase() !== 'USD';
       const dropboxPaths: string[] = [];
@@ -575,92 +504,6 @@ export default function GmailSetup() {
                 )}
               </CardContent>
             </Card>
-
-            {/* Dropbox Connection Card */}
-            {isAuthenticated && (
-              <Card className="border-brand-primary/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    {t('gmailSetup.dropboxSection.title')}
-                    {dropboxStatus?.connected && (
-                      <Badge className="bg-green-500">{t('gmailSetup.dropboxSection.connected')}</Badge>
-                    )}
-                  </CardTitle>
-                  <CardDescription>
-                    {t('gmailSetup.dropboxSection.title')}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {!dropboxStatus?.connected ? (
-                    <div className="space-y-4">
-                      <p className="text-sm text-gray-600">
-                        Click the button below to connect your Dropbox account. You'll be able to choose which folder to use after connecting.
-                      </p>
-                      <Button 
-                        onClick={connectDropbox} 
-                        disabled={loading}
-                        className="w-full bg-brand-primary hover:bg-brand-primary/90"
-                      >
-                        {loading ? 'Redirecting to Dropbox...' : t('gmailSetup.dropboxSection.connect')}
-                      </Button>
-                    </div>
-                  ) : (
-                    <div className="space-y-4">
-                      {/* Folder selector */}
-                      <div className="space-y-2">
-                        <Label htmlFor="folder-path" className="flex items-center gap-2">
-                          <FolderOpen className="w-4 h-4" />
-                          {t('gmailSetup.dropboxSection.folder')}
-                        </Label>
-                        <div className="flex gap-2">
-                          <Input
-                            id="folder-path"
-                            type="text"
-                            value={folderPath}
-                            onChange={(e) => setFolderPath(e.target.value)}
-                            placeholder="/Smart Receipts"
-                            className="flex-1"
-                          />
-                          <Button
-                            onClick={() => saveFolderPreference(folderPath)}
-                            disabled={savingFolder}
-                            className="bg-brand-primary hover:bg-brand-primary/90"
-                          >
-                            {savingFolder ? (
-                              <>
-                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
-                                Saving...
-                              </>
-                            ) : (
-                              'Save'
-                            )}
-                          </Button>
-                        </div>
-                        <p className="text-xs text-gray-500">
-                          Receipts will be uploaded to this folder in your Dropbox
-                        </p>
-                      </div>
-
-                      {/* Disconnect button */}
-                      <div className="pt-4 border-t">
-                        <p className="text-sm text-gray-600 mb-3">
-                          Connected to the wrong Dropbox account? You can disconnect and reconnect with a different one.
-                        </p>
-                        <Button
-                          onClick={disconnectDropbox}
-                          disabled={loading}
-                          variant="destructive"
-                          size="sm"
-                          className="w-full"
-                        >
-                          {loading ? 'Disconnecting...' : 'Disconnect Dropbox'}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            )}
 
             {/* Scan Receipts Card */}
             {isAuthenticated && (

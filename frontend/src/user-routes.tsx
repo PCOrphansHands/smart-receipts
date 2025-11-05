@@ -9,6 +9,7 @@ import { UserGuard } from "app";
 
 const App = lazy(() => import("./pages/App.tsx"));
 const GmailSetup = lazy(() => import("./pages/GmailSetup.tsx"));
+const DropboxSetup = lazy(() => import("./pages/DropboxSetup.tsx"));
 const UploadReceipts = lazy(() => import("./pages/UploadReceipts.tsx"));
 const SignIn = lazy(() => import("./pages/SignIn.tsx"));
 
@@ -18,6 +19,8 @@ export const userRoutes: RouteObject[] = [
 	{ path: "/", element: <UserGuard><App /></UserGuard>},
 	{ path: "/gmail-setup", element: <UserGuard><GmailSetup /></UserGuard>},
 	{ path: "/gmailsetup", element: <UserGuard><GmailSetup /></UserGuard>},
+	{ path: "/dropbox-setup", element: <UserGuard><DropboxSetup /></UserGuard>},
+	{ path: "/dropboxsetup", element: <UserGuard><DropboxSetup /></UserGuard>},
 	{ path: "/upload-receipts", element: <UserGuard><UploadReceipts /></UserGuard>},
 	{ path: "/uploadreceipts", element: <UserGuard><UploadReceipts /></UserGuard>},
 
