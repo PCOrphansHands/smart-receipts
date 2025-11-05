@@ -29,6 +29,18 @@ export class Brain<SecurityDataType = unknown> extends HttpClient<SecurityDataTy
     });
 
   /**
+   * Disconnect Gmail
+   * @name disconnect_gmail
+   * @request POST:/gmail/disconnect
+   */
+  disconnect_gmail = (params: RequestParams = {}) =>
+    this.request<any, any>({
+      path: `/gmail/disconnect`,
+      method: "POST",
+      ...params,
+    });
+
+  /**
    * Start Gmail Auth
    * @name start_gmail_auth
    * @request GET:/gmail/auth/start
@@ -102,6 +114,18 @@ export class Brain<SecurityDataType = unknown> extends HttpClient<SecurityDataTy
     this.request<any, any>({
       path: `/dropbox/status`,
       method: "GET",
+      ...params,
+    });
+
+  /**
+   * Disconnect Dropbox
+   * @name disconnect_dropbox
+   * @request POST:/dropbox/disconnect
+   */
+  disconnect_dropbox = (params: RequestParams = {}) =>
+    this.request<any, any>({
+      path: `/dropbox/disconnect`,
+      method: "POST",
       ...params,
     });
 
