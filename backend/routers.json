@@ -3,12 +3,12 @@
     "gmail": {
       "name": "gmail",
       "version": "2025-10-02T18:16:37",
-      "disableAuth": false
+      "disableAuth": true
     },
     "dropbox_integration": {
       "name": "dropbox_integration",
       "version": "2025-10-02T19:01:19",
-      "disableAuth": false
+      "disableAuth": true
     },
     "receipt_extraction": {
       "name": "receipt_extraction",
