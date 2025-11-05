@@ -28,6 +28,9 @@ class ReceiptUploadStatus(BaseModel):
     dropbox_paths: Optional[list[str]] = None
     receipt_metadata: Optional[dict] = None
     source_type: Optional[str] = None
+    category: Optional[str] = None
+    uploaded_by_name: Optional[str] = None
+    uploaded_by_email: Optional[str] = None
 
 
 class MarkUploadedRequest(BaseModel):
@@ -35,6 +38,9 @@ class MarkUploadedRequest(BaseModel):
     dropbox_paths: list[str]
     receipt_metadata: Optional[dict] = None
     source_type: str = "gmail_attachment"  # gmail_attachment, gmail_body, upload
+    category: str = "Uncategorized"
+    uploaded_by_name: Optional[str] = None
+    uploaded_by_email: Optional[str] = None
 
 
 class GetUploadStatusRequest(BaseModel):
@@ -55,9 +61,10 @@ async def mark_uploaded(request: MarkUploadedRequest, user: AuthorizedUser) -> d
                 """
                 INSERT INTO uploaded_receipts (
                     user_id, receipt_key, uploaded_to_dropbox, upload_timestamp,
-                    dropbox_paths, receipt_metadata, source_type, updated_at
+                    dropbox_paths, receipt_metadata, source_type, category,
+                    uploaded_by_name, uploaded_by_email, updated_at
                 )
-                VALUES ($1, $2, TRUE, $3, $4, $5::jsonb, $6, $7)
+                VALUES ($1, $2, TRUE, $3, $4, $5::jsonb, $6, $7, $8, $9, $10)
                 ON CONFLICT (user_id, receipt_key)
                 DO UPDATE SET
                     uploaded_to_dropbox = TRUE,
@@ -65,7 +72,10 @@ async def mark_uploaded(request: MarkUploadedRequest, user: AuthorizedUser) -> d
                     dropbox_paths = $4,
                     receipt_metadata = $5::jsonb,
                     source_type = $6,
-                    updated_at = $7
+                    category = $7,
+                    uploaded_by_name = $8,
+                    uploaded_by_email = $9,
+                    updated_at = $10
                 """,
                 user.sub,
                 request.receipt_key,
@@ -73,6 +83,9 @@ async def mark_uploaded(request: MarkUploadedRequest, user: AuthorizedUser) -> d
                 request.dropbox_paths,
                 metadata_json,
                 request.source_type,
+                request.category,
+                request.uploaded_by_name,
+                request.uploaded_by_email,
                 datetime.utcnow(),
             )
 
@@ -98,7 +111,8 @@ async def get_upload_status(request: GetUploadStatusRequest, user: AuthorizedUse
             rows = await conn.fetch(
                 """
                 SELECT receipt_key, uploaded_to_dropbox, upload_timestamp,
-                       dropbox_paths, receipt_metadata, source_type
+                       dropbox_paths, receipt_metadata, source_type, category,
+                       uploaded_by_name, uploaded_by_email
                 FROM uploaded_receipts
                 WHERE user_id = $1 AND receipt_key = ANY($2)
                 """,
@@ -116,6 +130,9 @@ async def get_upload_status(request: GetUploadStatusRequest, user: AuthorizedUse
                     "dropbox_paths": row['dropbox_paths'],
                     "receipt_metadata": row['receipt_metadata'],
                     "source_type": row['source_type'],
+                    "category": row['category'],
+                    "uploaded_by_name": row['uploaded_by_name'],
+                    "uploaded_by_email": row['uploaded_by_email'],
                 }
 
             return {
@@ -129,32 +146,100 @@ async def get_upload_status(request: GetUploadStatusRequest, user: AuthorizedUse
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.get("/categories")
+async def get_categories(user: AuthorizedUser) -> dict:
+    """Get list of available receipt categories"""
+    try:
+        conn = await get_db_connection()
+        try:
+            rows = await conn.fetch(
+                """
+                SELECT name, description, color, icon, display_order
+                FROM receipt_categories
+                ORDER BY display_order ASC
+                """
+            )
+
+            categories = []
+            for row in rows:
+                categories.append({
+                    "name": row['name'],
+                    "description": row['description'],
+                    "color": row['color'],
+                    "icon": row['icon'],
+                    "display_order": row['display_order'],
+                })
+
+            return {
+                "success": True,
+                "categories": categories
+            }
+        finally:
+            await conn.close()
+    except Exception as e:
+        print(f"Error getting categories: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.get("/list")
-async def list_uploaded_receipts(user: AuthorizedUser, include_uploaded: bool = True, include_not_uploaded: bool = True) -> dict:
+async def list_uploaded_receipts(
+    user: AuthorizedUser,
+    include_uploaded: bool = True,
+    include_not_uploaded: bool = True,
+    category: Optional[str] = None,
+    start_date: Optional[str] = None,
+    end_date: Optional[str] = None,
+    vendor_search: Optional[str] = None
+) -> dict:
     """List all tracked receipts with optional filtering"""
     try:
         conn = await get_db_connection()
         try:
             # Build query based on filters
-            if include_uploaded and include_not_uploaded:
-                where_clause = "WHERE user_id = $1"
-                params = [user.sub]
-            elif include_uploaded:
-                where_clause = "WHERE user_id = $1 AND uploaded_to_dropbox = TRUE"
-                params = [user.sub]
-            elif include_not_uploaded:
-                where_clause = "WHERE user_id = $1 AND uploaded_to_dropbox = FALSE"
-                params = [user.sub]
-            else:
-                return {"success": True, "receipts": []}
+            where_clauses = ["user_id = $1"]
+            params = [user.sub]
+            param_count = 1
+
+            # Upload status filter
+            if include_uploaded and not include_not_uploaded:
+                where_clauses.append("uploaded_to_dropbox = TRUE")
+            elif include_not_uploaded and not include_uploaded:
+                where_clauses.append("uploaded_to_dropbox = FALSE")
+            elif not include_uploaded and not include_not_uploaded:
+                return {"success": True, "receipts": [], "count": 0}
+
+            # Category filter
+            if category and category != "All":
+                param_count += 1
+                where_clauses.append(f"category = ${param_count}")
+                params.append(category)
+
+            # Date range filter
+            if start_date:
+                param_count += 1
+                where_clauses.append(f"upload_timestamp >= ${param_count}")
+                params.append(start_date)
+            if end_date:
+                param_count += 1
+                where_clauses.append(f"upload_timestamp <= ${param_count}")
+                params.append(end_date)
+
+            # Vendor search filter
+            if vendor_search:
+                param_count += 1
+                where_clauses.append(f"receipt_metadata->>'vendor' ILIKE ${param_count}")
+                params.append(f"%{vendor_search}%")
+
+            where_clause = "WHERE " + " AND ".join(where_clauses)
 
             rows = await conn.fetch(
                 f"""
                 SELECT receipt_key, uploaded_to_dropbox, upload_timestamp,
-                       dropbox_paths, receipt_metadata, source_type, created_at
+                       dropbox_paths, receipt_metadata, source_type, category,
+                       uploaded_by_name, uploaded_by_email, created_at
                 FROM uploaded_receipts
                 {where_clause}
-                ORDER BY created_at DESC
+                ORDER BY upload_timestamp DESC NULLS LAST, created_at DESC
                 """,
                 *params
             )
@@ -168,6 +253,9 @@ async def list_uploaded_receipts(user: AuthorizedUser, include_uploaded: bool = 
                     "dropbox_paths": row['dropbox_paths'],
                     "receipt_metadata": row['receipt_metadata'],
                     "source_type": row['source_type'],
+                    "category": row['category'],
+                    "uploaded_by_name": row['uploaded_by_name'],
+                    "uploaded_by_email": row['uploaded_by_email'],
                     "created_at": row['created_at'].isoformat() if row['created_at'] else None,
                 })
 

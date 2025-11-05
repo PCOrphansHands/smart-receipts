@@ -198,7 +198,7 @@ export class Brain<SecurityDataType = unknown> extends HttpClient<SecurityDataTy
    * @name mark_receipt_uploaded
    * @request POST:/upload-tracking/mark-uploaded
    */
-  mark_receipt_uploaded = (data: { receipt_key: string; dropbox_paths: string[]; receipt_metadata?: any; source_type?: string }, params: RequestParams = {}) =>
+  mark_receipt_uploaded = (data: { receipt_key: string; dropbox_paths: string[]; receipt_metadata?: any; source_type?: string; category?: string; uploaded_by_name?: string; uploaded_by_email?: string }, params: RequestParams = {}) =>
     this.request<any, any>({
       path: `/upload-tracking/mark-uploaded`,
       method: "POST",
@@ -226,11 +226,23 @@ export class Brain<SecurityDataType = unknown> extends HttpClient<SecurityDataTy
    * @name list_uploaded_receipts
    * @request GET:/upload-tracking/list
    */
-  list_uploaded_receipts = (query?: { include_uploaded?: boolean; include_not_uploaded?: boolean }, params: RequestParams = {}) =>
+  list_uploaded_receipts = (query?: { include_uploaded?: boolean; include_not_uploaded?: boolean; category?: string; start_date?: string; end_date?: string; vendor_search?: string }, params: RequestParams = {}) =>
     this.request<any, any>({
       path: `/upload-tracking/list`,
       method: "GET",
       query: query,
+      ...params,
+    });
+
+  /**
+   * Get Categories
+   * @name get_categories
+   * @request GET:/upload-tracking/categories
+   */
+  get_categories = (params: RequestParams = {}) =>
+    this.request<any, any>({
+      path: `/upload-tracking/categories`,
+      method: "GET",
       ...params,
     });
 
