@@ -69,7 +69,7 @@ async def get_gmail_status(user: AuthorizedUser) -> GmailStatusResponse:
     try:
         settings = get_settings()
         database_url = settings.DATABASE_URL
-        
+
         # Quick database check with 2-second timeout
         conn = await asyncpg.connect(database_url, timeout=2)
         try:
@@ -80,7 +80,7 @@ async def get_gmail_status(user: AuthorizedUser) -> GmailStatusResponse:
                 ),
                 timeout=2.0
             )
-            
+
             if row:
                 print(f"Gmail status: CONNECTED (found tokens for {user.sub})")
                 return GmailStatusResponse(connected=True)
@@ -89,10 +89,35 @@ async def get_gmail_status(user: AuthorizedUser) -> GmailStatusResponse:
                 return GmailStatusResponse(connected=False)
         finally:
             await conn.close()
-            
+
     except Exception as e:
         print(f"Error checking Gmail status: {type(e).__name__}: {str(e)}")
         return GmailStatusResponse(connected=False)
+
+
+@router.post("/disconnect")
+async def disconnect_gmail(user: AuthorizedUser):
+    """
+    Disconnect the user's Gmail account by removing their stored tokens.
+    """
+    print(f"Disconnecting Gmail for user: {user.sub}")
+    try:
+        settings = get_settings()
+        database_url = settings.DATABASE_URL
+
+        conn = await asyncpg.connect(database_url)
+        try:
+            await conn.execute(
+                "DELETE FROM gmail_tokens WHERE user_id = $1",
+                user.sub
+            )
+            print(f"Gmail tokens deleted for user: {user.sub}")
+            return {"success": True, "message": "Gmail disconnected successfully"}
+        finally:
+            await conn.close()
+    except Exception as e:
+        print(f"Error disconnecting Gmail: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to disconnect Gmail: {str(e)}")
 
 @router.get("/auth/start")
 async def start_gmail_auth(user: AuthorizedUser):

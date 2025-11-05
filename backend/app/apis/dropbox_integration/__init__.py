@@ -349,6 +349,29 @@ async def get_dropbox_status(user: AuthorizedUser) -> DropboxStatusResponse:
         )
 
 
+@router.post("/disconnect")
+async def disconnect_dropbox(user: AuthorizedUser):
+    """
+    Disconnect the user's Dropbox account by removing their stored tokens.
+    """
+    print(f"Disconnecting Dropbox for user: {user.sub}")
+    try:
+        settings = get_settings()
+        conn = await asyncpg.connect(settings.DATABASE_URL)
+        try:
+            await conn.execute(
+                "DELETE FROM dropbox_tokens WHERE user_id = $1",
+                user.sub
+            )
+            print(f"Dropbox tokens deleted for user: {user.sub}")
+            return {"success": True, "message": "Dropbox disconnected successfully"}
+        finally:
+            await conn.close()
+    except Exception as e:
+        print(f"Error disconnecting Dropbox: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to disconnect Dropbox: {str(e)}")
+
+
 @router.post("/upload")
 async def upload_to_dropbox(request: UploadToDropboxRequest, user: AuthorizedUser) -> UploadToDropboxResponse:
     """

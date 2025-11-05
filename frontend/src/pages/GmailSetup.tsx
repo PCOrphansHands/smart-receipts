@@ -154,6 +154,59 @@ export default function GmailSetup() {
     }
   };
 
+  const disconnectDropbox = async () => {
+    if (!confirm('Are you sure you want to disconnect your Dropbox account? You can reconnect anytime.')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await brain.disconnect_dropbox();
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('Dropbox disconnected successfully');
+        setDropboxStatus({ connected: false, account_name: null });
+        // Reload page to reset state
+        window.location.reload();
+      } else {
+        toast.error('Failed to disconnect Dropbox');
+      }
+    } catch (error) {
+      console.error('Dropbox disconnect failed:', error);
+      toast.error('Failed to disconnect Dropbox');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const disconnectGmail = async () => {
+    if (!confirm('Are you sure you want to disconnect your Gmail account? You can reconnect anytime.')) {
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await brain.disconnect_gmail();
+      const data = await response.json();
+
+      if (data.success) {
+        toast.success('Gmail disconnected successfully');
+        setIsAuthenticated(false);
+        setEmails(null);
+        // Reload page to reset state
+        window.location.reload();
+      } else {
+        toast.error('Failed to disconnect Gmail');
+      }
+    } catch (error) {
+      console.error('Gmail disconnect failed:', error);
+      toast.error('Failed to disconnect Gmail');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const uploadToDropbox = async (receiptKey: string) => {
     const receipt = processedReceipts[receiptKey];
     if (!receipt || !receipt.pdf_content || !receipt.suggested_filename) {
@@ -477,34 +530,51 @@ export default function GmailSetup() {
 
           {/* Authentication Card */}
           <div className="max-w-4xl mx-auto space-y-6 pb-8">
-            {/* Gmail Connection Card - Hide when connected */}
-            {!isAuthenticated && (
-              <Card className="border-brand-primary/20">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    {t('gmailSetup.gmailSection.title')}
-                  </CardTitle>
-                  <CardDescription>
-                    {t('gmailSetup.gmailSection.title')}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-4">
+            {/* Gmail Connection Card */}
+            <Card className="border-brand-primary/20">
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
+                  {t('gmailSetup.gmailSection.title')}
+                  {isAuthenticated && (
+                    <Badge className="bg-green-500">{t('gmailSetup.gmailSection.connected')}</Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  {isAuthenticated ? 'Your Gmail account is connected' : t('gmailSetup.gmailSection.title')}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {!isAuthenticated ? (
                   <div className="space-y-4">
                     <p className="text-sm text-gray-600">
-                      Click the button below to authorize Smart Receipts to access your Gmail. 
+                      Click the button below to authorize Smart Receipts to access your Gmail.
                       You'll be redirected to Google to grant permissions, then automatically returned here.
                     </p>
-                    <Button 
-                      onClick={startAuth} 
+                    <Button
+                      onClick={startAuth}
                       disabled={loading}
                       className="w-full bg-brand-primary hover:bg-brand-primary/90"
                     >
                       {loading ? 'Redirecting to Google...' : t('gmailSetup.gmailSection.connect')}
                     </Button>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                ) : (
+                  <div className="space-y-4">
+                    <p className="text-sm text-gray-600">
+                      You're connected! You can disconnect and reconnect with a different Gmail account if needed.
+                    </p>
+                    <Button
+                      onClick={disconnectGmail}
+                      disabled={loading}
+                      variant="destructive"
+                      className="w-full"
+                    >
+                      {loading ? 'Disconnecting...' : 'Disconnect Gmail'}
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
 
             {/* Dropbox Connection Card */}
             {isAuthenticated && (
@@ -536,7 +606,7 @@ export default function GmailSetup() {
                     </div>
                   ) : (
                     <div className="space-y-4">
-                      {/* Hide connected status message, only show folder selector */}
+                      {/* Folder selector */}
                       <div className="space-y-2">
                         <Label htmlFor="folder-path" className="flex items-center gap-2">
                           <FolderOpen className="w-4 h-4" />
@@ -569,6 +639,22 @@ export default function GmailSetup() {
                         <p className="text-xs text-gray-500">
                           Receipts will be uploaded to this folder in your Dropbox
                         </p>
+                      </div>
+
+                      {/* Disconnect button */}
+                      <div className="pt-4 border-t">
+                        <p className="text-sm text-gray-600 mb-3">
+                          Connected to the wrong Dropbox account? You can disconnect and reconnect with a different one.
+                        </p>
+                        <Button
+                          onClick={disconnectDropbox}
+                          disabled={loading}
+                          variant="destructive"
+                          size="sm"
+                          className="w-full"
+                        >
+                          {loading ? 'Disconnecting...' : 'Disconnect Dropbox'}
+                        </Button>
                       </div>
                     </div>
                   )}
