@@ -82,21 +82,18 @@ def get_supabase_auth_config() -> dict | None:
     """Get Supabase authentication configuration from environment variables."""
     settings = get_settings()
 
-    # Check if Supabase is configured
-    if not settings.SUPABASE_URL:
-        print("Warning: SUPABASE_URL not configured")
+    # Check if Supabase JWT Secret is configured
+    if not settings.SUPABASE_JWT_SECRET:
+        print("Warning: SUPABASE_JWT_SECRET not configured - authentication will be disabled")
         return None
 
-    # Supabase uses JWKS for JWT validation
-    # The JWKS endpoint is at /auth/v1/jwks
-    jwks_url = f"{settings.SUPABASE_URL}/auth/v1/jwks"
-
-    # The audience should be set to "authenticated" for Supabase
-    # This is the default role for authenticated users in Supabase
+    # Supabase uses JWT Secret (HS256) for token validation
+    # The JWT Secret can be found in: Supabase Dashboard → Settings → API → JWT Secret
     return {
-        "jwks_url": jwks_url,
+        "jwt_secret": settings.SUPABASE_JWT_SECRET,
         "audience": "authenticated",
-        "header": "Authorization"
+        "header": "Authorization",
+        "algorithm": "HS256"
     }
 
 

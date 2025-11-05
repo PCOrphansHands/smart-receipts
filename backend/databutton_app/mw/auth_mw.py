@@ -10,9 +10,11 @@ from starlette.requests import Request
 
 
 class AuthConfig(BaseModel):
-    jwks_url: str
+    jwks_url: str | None = None
+    jwt_secret: str | None = None
     audience: str
     header: str
+    algorithm: str = "RS256"  # RS256 for JWKS, HS256 for JWT Secret
 
 
 class User(BaseModel):
@@ -143,27 +145,38 @@ def authorize_token(
     token: str,
     auth_config: AuthConfig,
 ) -> User | None:
-    # Audience and jwks url to get signing key from based on the users config
-    jwks_urls = [(auth_config.audience, auth_config.jwks_url)]
-
     payload = None
-    for audience, jwks_url in jwks_urls:
-        try:
-            key, alg = get_signing_key(jwks_url, token)
-        except Exception as e:
-            print(f"Failed to get signing key {e}")
-            continue
 
+    # Try JWT Secret first (for Supabase HS256)
+    if auth_config.jwt_secret:
         try:
+            payload = jwt.decode(
+                token,
+                key=auth_config.jwt_secret,
+                algorithms=["HS256"],
+                audience=auth_config.audience,
+                options={"verify_aud": False}  # Supabase tokens don't always have audience
+            )
+            print(f"Token validated using JWT Secret (HS256)")
+        except jwt.PyJWTError as e:
+            print(f"Failed to decode token with JWT Secret: {e}")
+
+    # If JWT Secret didn't work, try JWKS (for RS256)
+    if payload is None and auth_config.jwks_url:
+        try:
+            key, alg = get_signing_key(auth_config.jwks_url, token)
             payload = jwt.decode(
                 token,
                 key=key,
                 algorithms=[alg],
-                audience=audience,
+                audience=auth_config.audience,
             )
-        except jwt.PyJWTError as e:
-            print(f"Failed to decode and validate token {e}")
-            continue
+            print(f"Token validated using JWKS (RS256)")
+        except Exception as e:
+            print(f"Failed to decode token with JWKS: {e}")
+
+    if payload is None:
+        return None
 
     try:
         user = User.model_validate(payload)
