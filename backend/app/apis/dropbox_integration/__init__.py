@@ -174,7 +174,7 @@ async def get_dropbox_auth_url(user: AuthorizedUser) -> DropboxAuthUrlResponse:
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@router.get("/callback")
+@router.get("/callback", dependencies=[])
 async def dropbox_callback(code: str, state: str):
     """
     Handle the OAuth callback from Dropbox.

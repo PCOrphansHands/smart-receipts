@@ -167,7 +167,7 @@ async def start_gmail_auth(user: AuthorizedUser):
             detail=f"Failed to start OAuth flow: {str(e)}"
         )
 
-@router.get("/auth/callback")
+@router.get("/auth/callback", dependencies=[])
 async def gmail_auth_callback(code: str, state: str | None = None):
     """
     Handle the OAuth callback from Google.
