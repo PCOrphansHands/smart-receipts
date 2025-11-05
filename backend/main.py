@@ -142,7 +142,7 @@ def create_app() -> FastAPI:
         print("Warning: No Supabase auth config found - authentication will be disabled")
         app.state.auth_config = None
     else:
-        print(f"Supabase auth configured with JWKS URL: {supabase_config['jwks_url']}")
+        print(f"Supabase auth configured with JWT Secret (HS256) - User authentication enabled")
         app.state.auth_config = AuthConfig(**supabase_config)
 
     return app
