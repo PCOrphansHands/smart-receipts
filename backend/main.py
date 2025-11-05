@@ -105,6 +105,7 @@ def create_app() -> FastAPI:
     settings = get_settings()
     allowed_origins = [
         "https://smart-receipts.vercel.app",
+        "https://receipts.orphanshands.org",
         "http://localhost:5173",
         "http://localhost:3000"
     ]
