@@ -80,10 +80,24 @@ def import_api_routers() -> APIRouter:
 
 def get_supabase_auth_config() -> dict | None:
     """Get Supabase authentication configuration from environment variables."""
-    # For Supabase with legacy JWT secret, we don't use JWKS
-    # Instead, we disable auth validation for now
-    # TODO: Implement proper JWT validation with Supabase JWT secret
-    return None
+    settings = get_settings()
+
+    # Check if Supabase is configured
+    if not settings.SUPABASE_URL:
+        print("Warning: SUPABASE_URL not configured")
+        return None
+
+    # Supabase uses JWKS for JWT validation
+    # The JWKS endpoint is at /auth/v1/jwks
+    jwks_url = f"{settings.SUPABASE_URL}/auth/v1/jwks"
+
+    # The audience should be set to "authenticated" for Supabase
+    # This is the default role for authenticated users in Supabase
+    return {
+        "jwks_url": jwks_url,
+        "audience": "authenticated",
+        "header": "Authorization"
+    }
 
 
 def create_app() -> FastAPI:

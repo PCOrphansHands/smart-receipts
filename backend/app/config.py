@@ -25,6 +25,10 @@ class Settings:
     FRONTEND_URL: str
     BACKEND_URL: str
 
+    # Supabase Configuration
+    SUPABASE_URL: Optional[str] = None
+    SUPABASE_JWT_SECRET: Optional[str] = None
+
     # Environment
     ENVIRONMENT: str = "development"
 
@@ -44,6 +48,10 @@ class Settings:
         # Application URLs
         self.FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:5173")
         self.BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
+
+        # Supabase Configuration
+        self.SUPABASE_URL = os.getenv("SUPABASE_URL")
+        self.SUPABASE_JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET")
 
         # Environment
         self.ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
