@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import type { DropboxStatusResponse } from 'types';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, FolderOpen, LogOut } from 'lucide-react';
+import { Loader2, FolderOpen, LogOut, ExternalLink } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LanguageSelector from 'components/LanguageSelector';
 import { useNavigate } from 'react-router-dom';
@@ -167,7 +167,7 @@ export default function DropboxSetup() {
               </CardTitle>
               <CardDescription>
                 {dropboxStatus?.connected
-                  ? 'Your Dropbox account is connected'
+                  ? `Connected as: ${dropboxStatus.account_name || 'Unknown'}`
                   : 'Connect your Dropbox to save receipts automatically'
                 }
               </CardDescription>
@@ -221,6 +221,22 @@ export default function DropboxSetup() {
                     <p className="text-xs text-gray-500">
                       Receipts will be uploaded to this folder in your Dropbox
                     </p>
+                  </div>
+
+                  {/* Open Dropbox button */}
+                  <div className="pt-4 border-t">
+                    <p className="text-sm text-gray-600 mb-3">
+                      View your receipts folder in Dropbox
+                    </p>
+                    <Button
+                      onClick={() => window.open(`https://www.dropbox.com/home${folderPath}`, '_blank')}
+                      variant="outline"
+                      className="w-full"
+                    >
+                      <FolderOpen className="w-4 h-4 mr-2" />
+                      Open Dropbox Folder
+                      <ExternalLink className="w-3 h-3 ml-2" />
+                    </Button>
                   </div>
 
                   {/* Disconnect button */}
