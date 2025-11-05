@@ -25,15 +25,29 @@ I've implemented proper Supabase JWT authentication validation:
 
 1. **Updated `backend/app/config.py`**
    - Added `SUPABASE_URL` configuration
-   - Added `SUPABASE_JWT_SECRET` configuration (for reference, though JWKS is used)
+   - Added `SUPABASE_JWT_SECRET` configuration
 
 2. **Updated `backend/main.py`**
    - Implemented proper `get_supabase_auth_config()` function
-   - Now uses Supabase JWKS (JSON Web Key Set) for JWT validation
-   - JWKS endpoint: `{SUPABASE_URL}/auth/v1/jwks`
-   - Audience: `"authenticated"` (default Supabase role)
+   - Uses Supabase JWT Secret (HS256) for token validation
+   - Tried JWKS initially but Supabase requires API key for JWKS endpoint
+   - JWT Secret is the standard way to validate Supabase tokens
 
-3. **Updated `backend/.env.example`**
+3. **Updated `backend/databutton_app/mw/auth_mw.py`**
+   - Modified `AuthConfig` to support both `jwt_secret` and `jwks_url`
+   - Updated `authorize_token()` to try JWT Secret first (HS256), fallback to JWKS (RS256)
+   - Supports flexible authentication for different providers
+
+4. **Updated `backend/routers.json`**
+   - Changed `disableAuth` from `true` to `false` for gmail and dropbox_integration
+   - This was a critical security fix - routes were completely unprotected
+
+5. **Added `backend/app/apis/diagnostics/`**
+   - New diagnostics endpoint at `/routes/diagnostics/auth`
+   - Checks if JWT Secret is configured
+   - Reports authentication status
+
+6. **Updated `backend/.env.example`**
    - Added `SUPABASE_JWT_SECRET` to environment variables template
 
 ## How to Fix Your Deployment
@@ -49,36 +63,59 @@ I've implemented proper Supabase JWT authentication validation:
 
 ### Step 2: Update Your Backend Environment Variables
 
-Add the following environment variables to your backend deployment:
+Add the JWT Secret to your backend deployment:
 
 ```bash
-# Supabase Configuration
-SUPABASE_URL=https://your-project-ref.supabase.co
+# Supabase Configuration (REQUIRED)
 SUPABASE_JWT_SECRET=your-jwt-secret-from-supabase
 ```
 
+**You already have this in Railway!** I can see you've added:
+```bash
+SUPABASE_JWT_SECRET=gMC2RIVuXjS8NMWwiufEgSxDJPrMU7bbk13A/6e8GPZweRX00SvtrftdBgV7B8NeuN1N6sDJw66dQV7wR5aOHw==
+```
+
+So you're all set! Just wait for Railway to redeploy with the new code.
+
 #### For Local Development:
 1. Edit `backend/.env` file
-2. Add the variables above
+2. Add `SUPABASE_JWT_SECRET=<your-secret>`
 3. Restart your backend server
 
 #### For Vercel/Railway/Other Cloud Platforms:
 1. Go to your deployment platform's dashboard
 2. Navigate to Environment Variables settings
-3. Add both `SUPABASE_URL` and `SUPABASE_JWT_SECRET`
-4. Redeploy your backend
+3. Verify `SUPABASE_JWT_SECRET` is set (✅ already done in your case!)
+4. Wait for automatic redeploy after git push
 
 ### Step 3: Verify the Fix
 
-1. Restart your backend server
-2. Check the logs on startup - you should see:
+1. After Railway redeploys, check the diagnostics endpoint:
    ```
-   Supabase auth configured with JWKS URL: https://xxxxx.supabase.co/auth/v1/jwks
+   https://smart-receipts-production.up.railway.app/routes/diagnostics/auth
+   ```
+
+   You should see:
+   ```json
+   {
+     "jwt_secret_configured": true,
+     "jwt_secret_length": 88,
+     "auth_method": "JWT_SECRET",
+     "auth_enabled": true,
+     "info": "Supabase authentication configured using JWT Secret (HS256). Each user will have isolated access."
+   }
+   ```
+
+2. Check Railway logs - you should see:
+   ```
+   Token validated using JWT Secret (HS256)
+   User <uuid> authenticated
    ```
 
    Instead of:
    ```
-   Warning: No Supabase auth config found - authentication will be disabled
+   Warning: SUPABASE_JWT_SECRET not configured - authentication will be disabled
+   Auth not configured, using anonymous user
    ```
 
 3. Test with multiple users:
