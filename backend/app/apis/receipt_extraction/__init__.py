@@ -19,40 +19,25 @@ router = APIRouter(prefix="/receipt-extraction")
 # Helper function to convert date format
 def convert_date_format(date_str: str) -> str:
     """
-    Convert date to YYYY_MM_DD format from various input formats.
-    Handles both DD.MM.YYYY and MM/DD/YYYY formats.
+    Convert date to YYYY_MM_DD format from MM/DD/YYYY format.
+    Handles slashes, dots, and dashes as separators.
 
     Args:
-        date_str: Date in DD.MM.YYYY or MM/DD/YYYY format
+        date_str: Date in MM/DD/YYYY format (or with dots/dashes as separators)
 
     Returns:
-        Date in YYYY_MM_DD format (e.g., "2024_12_25")
+        Date in YYYY_MM_DD format (e.g., "2024_10_25")
     """
     try:
-        # Try splitting on dots (DD.MM.YYYY format)
-        if '.' in date_str:
-            parts = date_str.split('.')
-            if len(parts) == 3:
-                day, month, year = parts
-                return f"{year}_{month}_{day}"
+        # Replace all common separators with slashes for consistent parsing
+        normalized = date_str.replace('.', '/').replace('-', '/')
 
-        # Try splitting on slashes (MM/DD/YYYY format - American)
-        if '/' in date_str:
-            parts = date_str.split('/')
+        # Split on slashes - expecting MM/DD/YYYY format
+        if '/' in normalized:
+            parts = normalized.split('/')
             if len(parts) == 3:
-                month, day, year = parts  # American format is MM/DD/YYYY
-                return f"{year}_{month}_{day}"
-
-        # Try splitting on dashes (YYYY-MM-DD or DD-MM-YYYY)
-        if '-' in date_str:
-            parts = date_str.split('-')
-            if len(parts) == 3:
-                # Check if it's YYYY-MM-DD (year is first)
-                if len(parts[0]) == 4:
-                    year, month, day = parts
-                else:
-                    day, month, year = parts
-                return f"{year}_{month}_{day}"
+                month, day, year = parts  # MM/DD/YYYY format
+                return f"{year}_{month.zfill(2)}_{day.zfill(2)}"
 
         return date_str  # Return original if format doesn't match
     except Exception:
@@ -62,7 +47,7 @@ def convert_date_format(date_str: str) -> str:
 class ReceiptData(BaseModel):
     """Extracted receipt information"""
     vendor: str | None
-    date: str | None  # Format: DD.MM.YYYY
+    date: str | None  # Format: MM/DD/YYYY
     amount: str | None
     currency: str | None
     confidence: str  # high, medium, low
@@ -91,7 +76,7 @@ class ProcessReceiptRequest(BaseModel):
 class ProcessEmailBodyRequest(BaseModel):
     """Request to process an email body as a receipt"""
     email_id: str
-    email_date: str | None = None  # Fallback date if not found in receipt (DD.MM.YYYY format)
+    email_date: str | None = None  # Fallback date if not found in receipt (MM/DD/YYYY format)
 
 class ProcessReceiptResponse(BaseModel):
     """Response from processing a Gmail receipt attachment"""
@@ -222,14 +207,14 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
         prompt = """
         Analyze this receipt image and extract the following information:
         1. Vendor/Merchant name (the business that received the payment)
-        2. Payment date (in DD.MM.YYYY format)
+        2. Payment date (in MM/DD/YYYY format - American format)
         3. Total amount paid (the final total, not subtotal)
         4. Currency (e.g., USD, EUR, GBP)
         
         Respond in the following JSON format:
         {
             "vendor": "Business Name",
-            "date": "DD.MM.YYYY",
+            "date": "MM/DD/YYYY",
             "amount": "123.45",
             "currency": "USD",
             "confidence": "high/medium/low"
@@ -316,7 +301,7 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
                 clean_vendor = "".join(c for c in receipt_data.vendor if c.isalnum())
                 clean_vendor = clean_vendor.upper()
 
-                # Convert date from DD.MM.YYYY to YYYY_MM_DD
+                # Convert date from MM/DD/YYYY to YYYY_MM_DD
                 formatted_date = convert_date_format(receipt_data.date)
 
                 # Get file extension from original
@@ -664,7 +649,7 @@ Set confidence to:
                 clean_vendor = "".join(c for c in receipt_data.vendor if c.isalnum())
                 clean_vendor = clean_vendor.upper()
 
-                # Convert date from DD.MM.YYYY to YYYY_MM_DD
+                # Convert date from MM/DD/YYYY to YYYY_MM_DD
                 formatted_date = convert_date_format(receipt_data.date)
 
                 suggested_filename = f"{clean_vendor}_{formatted_date}_{receipt_data.amount}.pdf"
@@ -733,14 +718,14 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
         prompt = """
         Analyze this receipt image and extract the following information:
         1. Vendor/Merchant name (the business that received the payment)
-        2. Payment date (in DD.MM.YYYY format)
+        2. Payment date (in MM/DD/YYYY format - American format)
         3. Total amount paid (the final total, not subtotal)
         4. Currency (e.g., USD, EUR, GBP)
         
         Respond in the following JSON format:
         {
             "vendor": "Business Name",
-            "date": "DD.MM.YYYY",
+            "date": "MM/DD/YYYY",
             "amount": "123.45",
             "currency": "USD",
             "confidence": "high/medium/low"
@@ -895,14 +880,14 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
         prompt = """
         Analyze this receipt image and extract the following information:
         1. Vendor/Merchant name (the business that received the payment)
-        2. Payment date (in DD.MM.YYYY format)
+        2. Payment date (in MM/DD/YYYY format - American format)
         3. Total amount paid (the final total, not subtotal)
         4. Currency (e.g., USD, EUR, GBP)
         
         Respond in the following JSON format:
         {
             "vendor": "Business Name",
-            "date": "DD.MM.YYYY",
+            "date": "MM/DD/YYYY",
             "amount": "123.45",
             "currency": "USD",
             "confidence": "high/medium/low"
@@ -980,7 +965,7 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
                 clean_vendor = "".join(c for c in receipt_data.vendor if c.isalnum())
                 clean_vendor = clean_vendor.upper()
 
-                # Convert date from DD.MM.YYYY to YYYY_MM_DD
+                # Convert date from MM/DD/YYYY to YYYY_MM_DD
                 formatted_date = convert_date_format(receipt_data.date)
 
                 suggested_filename = f"{clean_vendor}_{formatted_date}_{receipt_data.amount}.pdf"
