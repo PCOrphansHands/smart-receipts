@@ -19,20 +19,41 @@ router = APIRouter(prefix="/receipt-extraction")
 # Helper function to convert date format
 def convert_date_format(date_str: str) -> str:
     """
-    Convert date from DD.MM.YYYY format to YYYY_MM_DD format.
+    Convert date to YYYY_MM_DD format from various input formats.
+    Handles both DD.MM.YYYY and MM/DD/YYYY formats.
 
     Args:
-        date_str: Date in DD.MM.YYYY format (e.g., "25.12.2024")
+        date_str: Date in DD.MM.YYYY or MM/DD/YYYY format
 
     Returns:
         Date in YYYY_MM_DD format (e.g., "2024_12_25")
     """
     try:
-        # Parse DD.MM.YYYY
-        parts = date_str.split('.')
-        if len(parts) == 3:
-            day, month, year = parts
-            return f"{year}_{month}_{day}"
+        # Try splitting on dots (DD.MM.YYYY format)
+        if '.' in date_str:
+            parts = date_str.split('.')
+            if len(parts) == 3:
+                day, month, year = parts
+                return f"{year}_{month}_{day}"
+
+        # Try splitting on slashes (MM/DD/YYYY format - American)
+        if '/' in date_str:
+            parts = date_str.split('/')
+            if len(parts) == 3:
+                month, day, year = parts  # American format is MM/DD/YYYY
+                return f"{year}_{month}_{day}"
+
+        # Try splitting on dashes (YYYY-MM-DD or DD-MM-YYYY)
+        if '-' in date_str:
+            parts = date_str.split('-')
+            if len(parts) == 3:
+                # Check if it's YYYY-MM-DD (year is first)
+                if len(parts[0]) == 4:
+                    year, month, day = parts
+                else:
+                    day, month, year = parts
+                return f"{year}_{month}_{day}"
+
         return date_str  # Return original if format doesn't match
     except Exception:
         return date_str  # Return original if conversion fails
