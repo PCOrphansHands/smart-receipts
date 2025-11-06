@@ -14,6 +14,7 @@ import { useNavigate } from 'react-router-dom';
 import { auth } from 'app/auth';
 import { useUserGuardContext } from 'app/auth/UserGuard';
 import { authLogger } from 'utils/logger';
+import CategorySelect from 'components/CategorySelect';
 
 export default function GmailSetup() {
   const { t } = useTranslation();
@@ -33,6 +34,7 @@ export default function GmailSetup() {
   const [uploadingToDropbox, setUploadingToDropbox] = useState<string | null>(null);
   const [uploadStatuses, setUploadStatuses] = useState<Record<string, ReceiptUploadStatus>>({});
   const [showUploaded, setShowUploaded] = useState<boolean>(true);
+  const [receiptCategories, setReceiptCategories] = useState<Record<string, string>>({});
   const hasCheckedStatus = useRef(false);
 
   // Check Gmail connection status on mount (only once)
@@ -193,6 +195,8 @@ export default function GmailSetup() {
       // Mark as uploaded in database
       try {
         const sourceType = receiptKey.endsWith('_body') ? 'gmail_body' : 'gmail_attachment';
+        const category = receiptCategories[receiptKey] || 'Uncategorized';
+
         await brain.mark_receipt_uploaded({
           receipt_key: receiptKey,
           dropbox_paths: dropboxPaths,
@@ -203,6 +207,9 @@ export default function GmailSetup() {
             currency: receiptData.currency,
           } : undefined,
           source_type: sourceType,
+          category: category,
+          uploaded_by_name: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Unknown',
+          uploaded_by_email: user?.email || 'unknown@example.com',
         });
 
         // Update local state to show as uploaded
@@ -673,7 +680,15 @@ export default function GmailSetup() {
                                                         </p>
                                                       )}
                                                       {dropboxStatus?.connected && (
-                                                        <Button
+                                                        <>
+                                                          <div className="mt-3">
+                                                            <CategorySelect
+                                                              value={receiptCategories[attachmentKey] || 'Uncategorized'}
+                                                              onChange={(category) => setReceiptCategories(prev => ({ ...prev, [attachmentKey]: category }))}
+                                                              showLabel={true}
+                                                            />
+                                                          </div>
+                                                          <Button
                                                           onClick={() => uploadToDropbox(attachmentKey)}
                                                           disabled={uploadingToDropbox === attachmentKey || uploadStatuses[attachmentKey]?.uploaded_to_dropbox}
                                                           size="sm"
@@ -696,6 +711,7 @@ export default function GmailSetup() {
                                                             </>
                                                           )}
                                                         </Button>
+                                                        </>
                                                       )}
                                                     </div>
                                                   )}
@@ -767,7 +783,15 @@ export default function GmailSetup() {
                                               <p><span className="font-medium">Amount:</span> {processed.receipt_data.amount} {processed.receipt_data.currency}</p>
                                               <p><span className="font-medium">Filename:</span> {processed.suggested_filename}</p>
                                               {dropboxStatus?.connected && (
-                                                <Button
+                                                <>
+                                                  <div className="mt-3">
+                                                    <CategorySelect
+                                                      value={receiptCategories[emailKey] || 'Uncategorized'}
+                                                      onChange={(category) => setReceiptCategories(prev => ({ ...prev, [emailKey]: category }))}
+                                                      showLabel={true}
+                                                    />
+                                                  </div>
+                                                  <Button
                                                   onClick={() => uploadToDropbox(emailKey)}
                                                   disabled={uploadingToDropbox === emailKey || uploadStatuses[emailKey]?.uploaded_to_dropbox}
                                                   size="sm"
@@ -790,10 +814,11 @@ export default function GmailSetup() {
                                                     </>
                                                   )}
                                                 </Button>
+                                                </>
                                               )}
                                             </div>
                                           )}
-                                          
+
                                           {processed && !processed.success && (
                                             <div className="p-3 bg-red-50 rounded-lg text-xs">
                                               <p className="text-red-600">{processed.error || 'Failed to process email'}</p>

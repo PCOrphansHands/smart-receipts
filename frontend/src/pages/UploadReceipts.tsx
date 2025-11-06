@@ -13,6 +13,8 @@ import CameraCapture from 'components/CameraCapture';
 import jsPDF from 'jspdf';
 import { auth } from 'app/auth';
 import { apiLogger, uiLogger } from 'utils/logger';
+import CategorySelect from 'components/CategorySelect';
+import { useUserGuardContext } from 'app/auth/UserGuard';
 
 interface ProcessedFile {
   id: string;
@@ -26,12 +28,14 @@ interface ProcessedFile {
 
 export default function UploadReceipts() {
   const { t } = useTranslation();
+  const { user } = useUserGuardContext();
   const [files, setFiles] = useState<ProcessedFile[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
   const [folderPath, setFolderPath] = useState<string>('/Smart_Receipts');
   const [showCamera, setShowCamera] = useState(false);
   const [showUploaded, setShowUploaded] = useState<boolean>(true);
+  const [defaultCategory, setDefaultCategory] = useState<string>('Uncategorized');
   const navigate = useNavigate();
 
   // Fetch user's saved folder preference on mount
@@ -281,6 +285,9 @@ export default function UploadReceipts() {
               currency: receiptData.currency,
             } : undefined,
             source_type: 'upload',
+            category: defaultCategory,
+            uploaded_by_name: user?.user_metadata?.full_name || user?.email?.split('@')[0] || 'Unknown',
+            uploaded_by_email: user?.email || 'unknown@example.com',
           });
 
           // Update file status to uploaded
@@ -427,14 +434,22 @@ export default function UploadReceipts() {
         {files.length > 0 && (
           <Card>
             <CardHeader>
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="flex-1 min-w-0">
                   <CardTitle>{t('upload.receipts.title')}</CardTitle>
                   <CardDescription>
                     {t('upload.receipts.description')}
                   </CardDescription>
+                  <div className="mt-4 max-w-xs">
+                    <CategorySelect
+                      value={defaultCategory}
+                      onChange={setDefaultCategory}
+                      label="Default Category"
+                      showLabel={true}
+                    />
+                  </div>
                 </div>
-                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto shrink-0">
                   <Button
                     variant="outline"
                     size="sm"

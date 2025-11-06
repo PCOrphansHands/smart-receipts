@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Label } from 'extensions/shadcn/components/label';
+import { Label } from '@/components/ui/label';
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from 'extensions/shadcn/components/select';
+} from '@/components/ui/select';
 import brain from 'brain';
 import { Tag } from 'lucide-react';
 
