@@ -128,12 +128,33 @@ export default function UploadReceipts() {
     }
   };
 
+  // Helper function to convert date format from MM/DD/YYYY to YYYY.MM.DD
+  const convertDateFormat = (dateStr: string): string => {
+    try {
+      // Replace all common separators with slashes for consistent parsing
+      const normalized = dateStr.replace(/\./g, '/').replace(/-/g, '/');
+
+      // Split on slashes - expecting MM/DD/YYYY format
+      if (normalized.includes('/')) {
+        const parts = normalized.split('/');
+        if (parts.length === 3) {
+          const [month, day, year] = parts;
+          return `${year}.${month.padStart(2, '0')}.${day.padStart(2, '0')}`;
+        }
+      }
+
+      return dateStr; // Return original if format doesn't match
+    } catch {
+      return dateStr; // Return original if conversion fails
+    }
+  };
+
   const handleCameraCapture = async (base64Image: string) => {
     setShowCamera(false);
-    
+
     const fileId = `camera-${Date.now()}`;
     const fileName = `camera-receipt-${Date.now()}.jpg`;
-    
+
     // Add to files list as processing
     setFiles(prev => [...prev, {
       id: fileId,
@@ -153,12 +174,17 @@ export default function UploadReceipts() {
       }
 
       const receiptData = extractData.data;
-      
-      // Generate suggested filename
-      const vendor = receiptData.vendor || 'Unknown';
-      const date = receiptData.date || 'Unknown';
+
+      // Generate suggested filename with proper date format
+      // Clean vendor name (remove special characters and spaces, convert to uppercase)
+      const cleanVendor = (receiptData.vendor || 'Unknown')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .toUpperCase();
+
+      // Convert date from MM/DD/YYYY to YYYY.MM.DD
+      const formattedDate = receiptData.date ? convertDateFormat(receiptData.date) : 'Unknown';
       const amount = receiptData.amount || '0';
-      const suggestedFilename = `${vendor}_${date}_${amount}.pdf`;
+      const suggestedFilename = `${cleanVendor}_${formattedDate}_${amount}.pdf`;
 
       // Convert image to PDF using jsPDF
       const pdf = new jsPDF();
