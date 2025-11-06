@@ -19,14 +19,14 @@ router = APIRouter(prefix="/receipt-extraction")
 # Helper function to convert date format
 def convert_date_format(date_str: str) -> str:
     """
-    Convert date to YYYY_MM_DD format from MM/DD/YYYY format.
+    Convert date to YYYY.MM.DD format from MM/DD/YYYY format.
     Handles slashes, dots, and dashes as separators.
 
     Args:
         date_str: Date in MM/DD/YYYY format (or with dots/dashes as separators)
 
     Returns:
-        Date in YYYY_MM_DD format (e.g., "2024_10_25")
+        Date in YYYY.MM.DD format (e.g., "2024.10.25")
     """
     try:
         # Replace all common separators with slashes for consistent parsing
@@ -37,7 +37,7 @@ def convert_date_format(date_str: str) -> str:
             parts = normalized.split('/')
             if len(parts) == 3:
                 month, day, year = parts  # MM/DD/YYYY format
-                return f"{year}_{month.zfill(2)}_{day.zfill(2)}"
+                return f"{year}.{month.zfill(2)}.{day.zfill(2)}"
 
         return date_str  # Return original if format doesn't match
     except Exception:
@@ -83,7 +83,7 @@ class ProcessReceiptResponse(BaseModel):
     success: bool
     receipt_data: ReceiptData | None
     error: str | None = None
-    suggested_filename: str | None = None  # VENDOR_YYYY_MM_DD_Total format
+    suggested_filename: str | None = None  # VENDOR_YYYY.MM.DD_Total format
     pdf_content: str | None = None  # Base64 encoded PDF content for upload
 
 class UploadedReceiptResponse(BaseModel):
@@ -98,7 +98,7 @@ class UploadedReceiptResponse(BaseModel):
 async def process_gmail_receipt(request: ProcessReceiptRequest, user: AuthorizedUser) -> ProcessReceiptResponse:
     """
     Download a receipt attachment from Gmail and extract its data.
-    Returns extracted data and suggested filename in format: VENDOR_YYYY_MM_DD_Total
+    Returns extracted data and suggested filename in format: VENDOR_YYYY.MM.DD_Total
 
     Args:
         request: email_id and attachment_filename from Gmail
@@ -294,14 +294,14 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
                 else:
                     print(f"Warning: Could not convert {receipt_data.currency} to USD")
             
-            # Generate suggested filename: VENDOR_YYYY_MM_DD_Total
+            # Generate suggested filename: VENDOR_YYYY.MM.DD_Total
             suggested_filename = None
             if receipt_data.vendor and receipt_data.date and receipt_data.amount:
                 # Clean vendor name (remove special characters and spaces, convert to uppercase)
                 clean_vendor = "".join(c for c in receipt_data.vendor if c.isalnum())
                 clean_vendor = clean_vendor.upper()
 
-                # Convert date from MM/DD/YYYY to YYYY_MM_DD
+                # Convert date from MM/DD/YYYY to YYYY.MM.DD
                 formatted_date = convert_date_format(receipt_data.date)
 
                 # Get file extension from original
@@ -642,14 +642,14 @@ Set confidence to:
                 else:
                     print(f"Warning: Could not convert {receipt_data.currency} to USD")
             
-            # Generate suggested filename: VENDOR_YYYY_MM_DD_Total
+            # Generate suggested filename: VENDOR_YYYY.MM.DD_Total
             suggested_filename = None
             if receipt_data.vendor and receipt_data.date and receipt_data.amount:
                 # Clean vendor name (remove special characters and spaces, convert to uppercase)
                 clean_vendor = "".join(c for c in receipt_data.vendor if c.isalnum())
                 clean_vendor = clean_vendor.upper()
 
-                # Convert date from MM/DD/YYYY to YYYY_MM_DD
+                # Convert date from MM/DD/YYYY to YYYY.MM.DD
                 formatted_date = convert_date_format(receipt_data.date)
 
                 suggested_filename = f"{clean_vendor}_{formatted_date}_{receipt_data.amount}.pdf"
@@ -957,7 +957,7 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
                 else:
                     print(f"Warning: Could not convert {receipt_data.currency} to USD")
             
-            # Generate suggested filename: VENDOR_YYYY_MM_DD_Total.pdf
+            # Generate suggested filename: VENDOR_YYYY.MM.DD_Total.pdf
             suggested_filename = None
             if receipt_data.vendor and receipt_data.date and receipt_data.amount:
                 # Clean vendor name (remove special characters and spaces, convert to uppercase)
@@ -965,7 +965,7 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
                 clean_vendor = "".join(c for c in receipt_data.vendor if c.isalnum())
                 clean_vendor = clean_vendor.upper()
 
-                # Convert date from MM/DD/YYYY to YYYY_MM_DD
+                # Convert date from MM/DD/YYYY to YYYY.MM.DD
                 formatted_date = convert_date_format(receipt_data.date)
 
                 suggested_filename = f"{clean_vendor}_{formatted_date}_{receipt_data.amount}.pdf"
