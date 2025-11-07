@@ -392,33 +392,42 @@ async def get_gmail_service(user: AuthorizedUser):
 async def scan_receipt_emails(
     user: AuthorizedUser,
     start_date: Optional[str] = None,  # Format: YYYY/MM/DD
-    end_date: Optional[str] = None      # Format: YYYY/MM/DD
+    end_date: Optional[str] = None,     # Format: YYYY/MM/DD
+    subject_search: Optional[str] = None  # Custom subject search term
 ) -> ReceiptEmailsResponse:
     """
     Scan Gmail inbox for emails that contain receipts.
     Looks for emails with 'Receipt', 'Payment', or 'Purchase' in subject,
     but excludes incoming payment notifications (donations received).
-    
-    Optional date filtering:
+
+    Optional filtering:
     - start_date: Only include emails after this date (format: YYYY/MM/DD)
     - end_date: Only include emails before this date (format: YYYY/MM/DD)
+    - subject_search: Search for specific text in email subject (overrides default keywords)
     """
     try:
         service = await get_gmail_service(user)
-        
-        # Search for emails with receipt-related keywords
-        # Exclude incoming payment notifications
-        query = (
-            '(subject:Receipt OR subject:Purchase OR subject:"Order Confirmation" '
-            'OR subject:Invoice OR subject:"Thank you for your purchase") '
-            '-subject:"You received a payment" '
-            '-subject:"payment was declined" '
-            '-subject:declined '
-            '-subject:donation '
-            '-subject:"donor" '
-            '-subject:"contribution received"'
-        )
-        
+
+        # Build query based on whether custom search is provided
+        if subject_search:
+            # If user provides custom search, use that for subject filtering
+            # Escape quotes in search term for Gmail query
+            search_term = subject_search.replace('"', '\\"')
+            query = f'subject:"{search_term}"'
+        else:
+            # Use default receipt-related keywords
+            # Exclude incoming payment notifications
+            query = (
+                '(subject:Receipt OR subject:Purchase OR subject:"Order Confirmation" '
+                'OR subject:Invoice OR subject:"Thank you for your purchase") '
+                '-subject:"You received a payment" '
+                '-subject:"payment was declined" '
+                '-subject:declined '
+                '-subject:donation '
+                '-subject:"donor" '
+                '-subject:"contribution received"'
+            )
+
         # Add date filters if provided
         if start_date:
             query += f' after:{start_date}'
