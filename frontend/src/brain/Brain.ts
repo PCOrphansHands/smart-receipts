@@ -57,7 +57,7 @@ export class Brain<SecurityDataType = unknown> extends HttpClient<SecurityDataTy
    * @name scan_receipt_emails
    * @request GET:/gmail/scan-receipts
    */
-  scan_receipt_emails = (query?: { start_date?: string; end_date?: string }, params: RequestParams = {}) =>
+  scan_receipt_emails = (query?: { start_date?: string; end_date?: string; subject_search?: string }, params: RequestParams = {}) =>
     this.request<any, any>({
       path: `/gmail/scan-receipts`,
       method: "GET",

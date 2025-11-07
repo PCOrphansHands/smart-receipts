@@ -24,6 +24,7 @@ export default function GmailSetup() {
   const [loading, setLoading] = useState<boolean>(false);
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
+  const [subjectSearch, setSubjectSearch] = useState("");
   const [expandedEmail, setExpandedEmail] = useState<string | null>(null);
   const [emailAttachments, setEmailAttachments] = useState<Record<string, AttachmentsResponse>>({});
   const [processingAttachment, setProcessingAttachment] = useState<string | null>(null);
@@ -308,15 +309,18 @@ export default function GmailSetup() {
     setLoading(true);
     try {
       // Convert dates from YYYY-MM-DD to YYYY/MM/DD format for Gmail
-      const params: { start_date?: string; end_date?: string } = {};
-      
+      const params: { start_date?: string; end_date?: string; subject_search?: string } = {};
+
       if (startDate) {
         params.start_date = startDate.replace(/-/g, '/');
       }
       if (endDate) {
         params.end_date = endDate.replace(/-/g, '/');
       }
-      
+      if (subjectSearch.trim()) {
+        params.subject_search = subjectSearch.trim();
+      }
+
       const response = await brain.scan_receipt_emails(params);
       const data = await response.json();
       console.log('Scanned emails:', data);
@@ -515,6 +519,20 @@ export default function GmailSetup() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  <div className="mb-4">
+                    <Label htmlFor="subject-search">Search by Email Subject</Label>
+                    <Input
+                      id="subject-search"
+                      type="text"
+                      placeholder="e.g., Amazon, Uber, Restaurant name..."
+                      value={subjectSearch}
+                      onChange={(e) => setSubjectSearch(e.target.value)}
+                      className="mt-1"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Leave empty to search all receipts, or enter text to find specific senders
+                    </p>
+                  </div>
                   <div className="grid grid-cols-2 gap-4 mb-4">
                     <div>
                       <Label htmlFor="start-date">{t('gmailSetup.scanSection.startDate')}</Label>
