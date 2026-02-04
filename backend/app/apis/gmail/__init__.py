@@ -413,7 +413,7 @@ async def scan_receipt_emails(
             # If user provides custom search, use that for subject filtering
             # Escape quotes in search term for Gmail query
             search_term = subject_search.replace('"', '\\"')
-            query = f'subject:"{search_term}"'
+            query = f'(subject:"{search_term}" OR from:"{search_term}")'
         else:
             # Use default receipt-related keywords
             # Exclude incoming payment notifications
