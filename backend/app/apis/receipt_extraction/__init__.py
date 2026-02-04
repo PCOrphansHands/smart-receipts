@@ -206,7 +206,7 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
         
         prompt = """
         Analyze this receipt image and extract the following information:
-        1. Vendor/Merchant name (the business that received the payment)
+        1. Vendor/Merchant name — the company that ISSUED this bill, invoice, or receipt (NOT the customer being billed). Look for the company logo, letterhead, or billing company address. Ignore the customer/account holder name.
         2. Payment date (in MM/DD/YYYY format - American format)
         3. Total amount paid (the final total, not subtotal)
         4. Currency (e.g., USD, EUR, GBP)
@@ -554,7 +554,7 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
         
         prompt = """
 Analyze this receipt image and extract the following information:
-1. Vendor/Merchant name (the business that received the payment)
+1. Vendor/Merchant name — the company that ISSUED this bill, invoice, or receipt (NOT the customer being billed). Look for the company logo, letterhead, or billing company address. Ignore the customer/account holder name.
 2. Payment date (in DD.MM.YYYY format)
 3. Total amount paid (the final total, not subtotal)
 4. Currency (e.g., USD, EUR, GBP)
@@ -717,7 +717,7 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
         # Create the prompt for GPT-4 Vision
         prompt = """
         Analyze this receipt image and extract the following information:
-        1. Vendor/Merchant name (the business that received the payment)
+        1. Vendor/Merchant name — the company that ISSUED this bill, invoice, or receipt (NOT the customer being billed). Look for the company logo, letterhead, or billing company address. Ignore the customer/account holder name.
         2. Payment date (in MM/DD/YYYY format - American format)
         3. Total amount paid (the final total, not subtotal)
         4. Currency (e.g., USD, EUR, GBP)
@@ -879,7 +879,7 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
         
         prompt = """
         Analyze this receipt image and extract the following information:
-        1. Vendor/Merchant name (the business that received the payment)
+        1. Vendor/Merchant name — the company that ISSUED this bill, invoice, or receipt (NOT the customer being billed). Look for the company logo, letterhead, or billing company address. Ignore the customer/account holder name.
         2. Payment date (in MM/DD/YYYY format - American format)
         3. Total amount paid (the final total, not subtotal)
         4. Currency (e.g., USD, EUR, GBP)

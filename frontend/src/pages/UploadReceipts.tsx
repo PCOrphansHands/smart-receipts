@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Upload, FileText, CheckCircle, XCircle, Loader2, Camera, LogOut, Filter, CheckCheck } from 'lucide-react';
+import { Upload, FileText, CheckCircle, XCircle, Loader2, Camera, LogOut, Filter, CheckCheck, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -32,6 +32,7 @@ export default function UploadReceipts() {
   const [folderPath, setFolderPath] = useState<string>('/Smart_Receipts');
   const [showCamera, setShowCamera] = useState(false);
   const [showUploaded, setShowUploaded] = useState<boolean>(true);
+  const [editingField, setEditingField] = useState<{ key: string; field: string } | null>(null);
   const navigate = useNavigate();
 
   // Fetch user's saved folder preference on mount
@@ -347,6 +348,55 @@ export default function UploadReceipts() {
     setFiles([]);
   };
 
+  const generateFilename = (vendor: string | null, date: string | null, amount: string | null, currentFilename: string | null): string | null => {
+    if (!vendor || !date || !amount) return currentFilename;
+    const cleanVendor = vendor.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const formattedDate = convertDateFormat(date);
+    const extension = currentFilename?.split('.').pop() || 'pdf';
+    return `${cleanVendor}_${formattedDate}_${amount}.${extension}`;
+  };
+
+  const updateFileField = (fileId: string, field: 'vendor' | 'date' | 'amount', value: string) => {
+    setFiles(prev => prev.map(f => {
+      if (f.id !== fileId || !f.data?.receipt_data) return f;
+      const updatedData = { ...f.data.receipt_data, [field]: value };
+      const newFilename = generateFilename(updatedData.vendor, updatedData.date, updatedData.amount, f.data.suggested_filename);
+      return {
+        ...f,
+        data: {
+          ...f.data,
+          receipt_data: updatedData,
+          suggested_filename: newFilename || f.data.suggested_filename,
+        }
+      };
+    }));
+  };
+
+  const renderEditableField = (fileId: string, field: 'vendor' | 'date' | 'amount', value: string | null, label: string, suffix?: string) => {
+    const isEditing = editingField?.key === fileId && editingField?.field === field;
+    return (
+      <p className="text-gray-600">
+        <span className="font-medium">{label}:</span>{' '}
+        {isEditing ? (
+          <input
+            type="text"
+            defaultValue={value || ''}
+            autoFocus
+            className="border rounded px-1 py-0.5 text-sm w-32"
+            onBlur={(e) => { updateFileField(fileId, field, e.target.value); setEditingField(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { updateFileField(fileId, field, e.currentTarget.value); setEditingField(null); } if (e.key === 'Escape') setEditingField(null); }}
+          />
+        ) : (
+          <span className="cursor-pointer hover:text-blue-600 inline-flex items-center gap-1" onClick={() => setEditingField({ key: fileId, field })}>
+            {value || 'N/A'}
+            <Pencil className="w-2.5 h-2.5 text-gray-400" />
+          </span>
+        )}
+        {suffix && ` ${suffix}`}
+      </p>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header with Logo */}
@@ -519,15 +569,9 @@ export default function UploadReceipts() {
                         
                         {file.status === 'success' && file.data?.receipt_data && (
                           <div className="mt-2 space-y-1 text-sm">
-                            <p className="text-gray-600">
-                              <span className="font-medium">Vendor:</span> {file.data.receipt_data.vendor || 'N/A'}
-                            </p>
-                            <p className="text-gray-600">
-                              <span className="font-medium">Date:</span> {file.data.receipt_data.date || 'N/A'}
-                            </p>
-                            <p className="text-gray-600">
-                              <span className="font-medium">Amount:</span> {file.data.receipt_data.currency} {file.data.receipt_data.amount || 'N/A'}
-                            </p>
+                            {renderEditableField(file.id, 'vendor', file.data.receipt_data.vendor, 'Vendor')}
+                            {renderEditableField(file.id, 'date', file.data.receipt_data.date, 'Date')}
+                            {renderEditableField(file.id, 'amount', file.data.receipt_data.amount, 'Amount', file.data.receipt_data.currency || undefined)}
                             {file.data.receipt_data.usd_amount && file.data.receipt_data.exchange_rate && (
                               <p className="text-green-600 font-medium">
                                 💱 USD Equivalent: ${file.data.receipt_data.usd_amount} 

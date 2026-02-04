@@ -7,7 +7,7 @@ import { toast } from 'sonner';
 import type { ReceiptEmailsResponse, AttachmentsResponse, ProcessReceiptResponse, DropboxStatusResponse, ReceiptUploadStatus } from 'types';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Loader2, FileText, CheckCircle2, Upload, FolderOpen, LogOut, Filter, CheckCheck } from 'lucide-react';
+import { Loader2, FileText, CheckCircle2, Upload, FolderOpen, LogOut, Filter, CheckCheck, Pencil } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import LanguageSelector from 'components/LanguageSelector';
 import { useNavigate } from 'react-router-dom';
@@ -34,6 +34,7 @@ export default function GmailSetup() {
   const [uploadingToDropbox, setUploadingToDropbox] = useState<string | null>(null);
   const [uploadStatuses, setUploadStatuses] = useState<Record<string, ReceiptUploadStatus>>({});
   const [showUploaded, setShowUploaded] = useState<boolean>(true);
+  const [editingField, setEditingField] = useState<{ key: string; field: string } | null>(null);
   const hasCheckedStatus = useRef(false);
 
   // Check Gmail connection status on mount (only once)
@@ -422,6 +423,73 @@ export default function GmailSetup() {
     }
   };
 
+  // Helper to convert date format from MM/DD/YYYY to YYYY.MM.DD
+  const convertDateFormat = (dateStr: string): string => {
+    try {
+      const normalized = dateStr.replace(/\./g, '/').replace(/-/g, '/');
+      if (normalized.includes('/')) {
+        const parts = normalized.split('/');
+        if (parts.length === 3) {
+          const [month, day, year] = parts;
+          return `${year}.${month.padStart(2, '0')}.${day.padStart(2, '0')}`;
+        }
+      }
+      return dateStr;
+    } catch {
+      return dateStr;
+    }
+  };
+
+  const generateFilename = (vendor: string | null, date: string | null, amount: string | null, currentFilename: string | null): string | null => {
+    if (!vendor || !date || !amount) return currentFilename;
+    const cleanVendor = vendor.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    const formattedDate = convertDateFormat(date);
+    const extension = currentFilename?.split('.').pop() || 'pdf';
+    return `${cleanVendor}_${formattedDate}_${amount}.${extension}`;
+  };
+
+  const updateReceiptField = (receiptKey: string, field: 'vendor' | 'date' | 'amount', value: string) => {
+    setProcessedReceipts(prev => {
+      const receipt = prev[receiptKey];
+      if (!receipt || !receipt.receipt_data) return prev;
+      const updatedData = { ...receipt.receipt_data, [field]: value };
+      const newFilename = generateFilename(updatedData.vendor, updatedData.date, updatedData.amount, receipt.suggested_filename);
+      return {
+        ...prev,
+        [receiptKey]: {
+          ...receipt,
+          receipt_data: updatedData,
+          suggested_filename: newFilename || receipt.suggested_filename,
+        }
+      };
+    });
+  };
+
+  const renderEditableField = (receiptKey: string, field: 'vendor' | 'date' | 'amount', value: string | null, label: string, suffix?: string) => {
+    const isEditing = editingField?.key === receiptKey && editingField?.field === field;
+    return (
+      <p>
+        <span className="font-medium">{label}:</span>{' '}
+        {isEditing ? (
+          <input
+            type="text"
+            defaultValue={value || ''}
+            autoFocus
+            className="border rounded px-1 py-0.5 text-xs w-32"
+            onBlur={(e) => { updateReceiptField(receiptKey, field, e.target.value); setEditingField(null); }}
+            onKeyDown={(e) => { if (e.key === 'Enter') { updateReceiptField(receiptKey, field, e.currentTarget.value); setEditingField(null); } if (e.key === 'Escape') setEditingField(null); }}
+          />
+        ) : (
+          <span className="cursor-pointer hover:text-blue-600 inline-flex items-center gap-1" onClick={() => setEditingField({ key: receiptKey, field })}>
+            {value || 'N/A'}
+            <Pencil className="w-2.5 h-2.5 text-gray-400" />
+          </span>
+        )}
+        {suffix && ` ${suffix}`}
+      </p>
+    );
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Header with Logo */}
@@ -673,9 +741,9 @@ export default function GmailSetup() {
                                                         <CheckCircle2 className="w-3 h-3" />
                                                         Processed
                                                       </p>
-                                                      <p><span className="font-medium">Vendor:</span> {processed.receipt_data.vendor}</p>
-                                                      <p><span className="font-medium">Date:</span> {processed.receipt_data.date}</p>
-                                                      <p><span className="font-medium">Amount:</span> {processed.receipt_data.amount} {processed.receipt_data.currency}</p>
+                                                      {renderEditableField(attachmentKey, 'vendor', processed.receipt_data.vendor, 'Vendor')}
+                                                      {renderEditableField(attachmentKey, 'date', processed.receipt_data.date, 'Date')}
+                                                      {renderEditableField(attachmentKey, 'amount', processed.receipt_data.amount, 'Amount', processed.receipt_data.currency || undefined)}
                                                       {processed.receipt_data.usd_amount && processed.receipt_data.exchange_rate && (
                                                         <p className="text-blue-600 font-medium">
                                                           💱 USD: ${processed.receipt_data.usd_amount} 
@@ -780,9 +848,9 @@ export default function GmailSetup() {
                                                 <CheckCircle2 className="w-3 h-3" />
                                                 Email Processed
                                               </p>
-                                              <p><span className="font-medium">Vendor:</span> {processed.receipt_data.vendor}</p>
-                                              <p><span className="font-medium">Date:</span> {processed.receipt_data.date}</p>
-                                              <p><span className="font-medium">Amount:</span> {processed.receipt_data.amount} {processed.receipt_data.currency}</p>
+                                              {renderEditableField(emailKey, 'vendor', processed.receipt_data.vendor, 'Vendor')}
+                                              {renderEditableField(emailKey, 'date', processed.receipt_data.date, 'Date')}
+                                              {renderEditableField(emailKey, 'amount', processed.receipt_data.amount, 'Amount', processed.receipt_data.currency || undefined)}
                                               <p><span className="font-medium">Filename:</span> {processed.suggested_filename}</p>
                                               {dropboxStatus?.connected && (
                                                 <Button
