@@ -24,9 +24,20 @@ def get_exchange_rate(from_currency: str, to_currency: str, date_str: str) -> fl
         0.0526  # 1 MDL = 0.0526 USD
     """
     try:
-        # Convert DD.MM.YYYY to YYYY-MM-DD format
-        day, month, year = date_str.split('.')
-        api_date = f"{year}-{month}-{day}"
+        # Convert date to YYYY-MM-DD format, handling multiple input formats
+        if '/' in date_str:
+            # MM/DD/YYYY format
+            month, day, year = date_str.split('/')
+        elif '.' in date_str:
+            # DD.MM.YYYY format
+            day, month, year = date_str.split('.')
+        elif '-' in date_str:
+            # YYYY-MM-DD format
+            year, month, day = date_str.split('-')
+        else:
+            print(f"Unrecognized date format: {date_str}")
+            return None
+        api_date = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
         
         # Convert currency codes to lowercase (API expects lowercase)
         from_curr = from_currency.lower()
