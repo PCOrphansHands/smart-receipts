@@ -170,7 +170,7 @@ export default function GmailSetup() {
       // If there's a USD conversion, upload a second PDF with USD amount in filename
       if (hasUsdConversion && receiptData) {
         const vendor = receiptData.vendor || 'Unknown';
-        const date = receiptData.date || 'Unknown';
+        const date = receiptData.date ? convertDateFormat(receiptData.date) : 'Unknown';
         const usdAmount = receiptData.usd_amount;
 
         // Sanitize vendor name

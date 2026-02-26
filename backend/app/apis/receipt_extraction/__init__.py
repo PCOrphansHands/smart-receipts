@@ -12,6 +12,7 @@ import io
 from PIL import Image
 from app.auth import AuthorizedUser
 from app.libs.currency_converter import convert_amount
+from app.libs.receipt_cropper import crop_receipt
 from app.config import get_secret
 
 router = APIRouter(prefix="/receipt-extraction")
@@ -711,9 +712,20 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
         Structured receipt data including vendor, date, amount, and confidence level
     """
     try:
+        # Try to auto-crop the receipt from the photo
+        image_base64 = request.image_base64
+        try:
+            raw_image_bytes = base64.b64decode(image_base64)
+            cropped_bytes = crop_receipt(raw_image_bytes)
+            if cropped_bytes:
+                image_base64 = base64.b64encode(cropped_bytes).decode('utf-8')
+                print("Using auto-cropped receipt image for extraction")
+        except Exception as e:
+            print(f"Receipt cropping skipped: {e}")
+
         # Initialize OpenAI client
         client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
-        
+
         # Create the prompt for GPT-4 Vision
         prompt = """
         Analyze this receipt image and extract the following information:
@@ -721,7 +733,7 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
         2. Payment date (in MM/DD/YYYY format - American format)
         3. Total amount paid (the final total, not subtotal)
         4. Currency (e.g., USD, EUR, GBP)
-        
+
         Respond in the following JSON format:
         {
             "vendor": "Business Name",
@@ -730,14 +742,14 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
             "currency": "USD",
             "confidence": "high/medium/low"
         }
-        
+
         If you cannot find any of these fields, set them to null.
         Set confidence to:
         - "high" if all fields are clearly visible
         - "medium" if some fields are unclear but inferable
         - "low" if multiple fields are missing or unclear
         """
-        
+
         # Call OpenAI Vision API with base64 image
         response = client.chat.completions.create(
             model="gpt-4o-mini",
@@ -749,7 +761,7 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
                         {
                             "type": "image_url",
                             "image_url": {
-                                "url": f"data:image/jpeg;base64,{request.image_base64}"
+                                "url": f"data:image/jpeg;base64,{image_base64}"
                             },
                         },
                     ],
@@ -784,17 +796,35 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
                 confidence=parsed_data.get("confidence", "low"),
                 raw_response=raw_response
             )
-            
+
+            # Convert to USD if currency is not USD
+            if receipt_data.currency and receipt_data.currency.upper() != 'USD' and receipt_data.amount and receipt_data.date:
+                print(f"Non-USD currency detected: {receipt_data.currency}. Converting to USD...")
+                conversion_result = convert_amount(
+                    receipt_data.amount,
+                    receipt_data.currency.upper(),
+                    'USD',
+                    receipt_data.date
+                )
+
+                if conversion_result:
+                    receipt_data.usd_amount = str(conversion_result['converted_amount'])
+                    receipt_data.exchange_rate = conversion_result['exchange_rate']
+                    receipt_data.conversion_date = conversion_result['date']
+                    print(f"Converted: {receipt_data.amount} {receipt_data.currency} = {receipt_data.usd_amount} USD")
+                else:
+                    print(f"Warning: Could not convert {receipt_data.currency} to USD")
+
             return ExtractReceiptResponse(
                 success=True,
                 data=receipt_data,
                 error=None
             )
-            
+
         except json.JSONDecodeError as e:
             print(f"Failed to parse JSON: {e}")
             print(f"Raw response: {raw_response}")
-            
+
             # Return with low confidence and raw response
             return ExtractReceiptResponse(
                 success=False,
@@ -808,7 +838,7 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
                 ),
                 error=f"Failed to parse response: {str(e)}"
             )
-            
+
     except Exception as e:
         print(f"Error extracting receipt data: {e}")
         return ExtractReceiptResponse(
@@ -855,11 +885,13 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
                     original_filename=file.filename
                 )
         elif file.content_type in ['image/jpeg', 'image/png', 'image/jpg']:
-            # For images, use directly
-            image_base64 = base64.b64encode(file_content).decode('utf-8')
-            # Convert image to PDF for Dropbox upload
+            # For images, try to auto-crop the receipt first
+            cropped_bytes = crop_receipt(file_content)
+            image_bytes = cropped_bytes if cropped_bytes else file_content
+            image_base64 = base64.b64encode(image_bytes).decode('utf-8')
+            # Convert image to PDF for Dropbox upload (use cropped version)
             try:
-                img = Image.open(io.BytesIO(file_content))
+                img = Image.open(io.BytesIO(image_bytes))
                 pdf_buffer = io.BytesIO()
                 img_rgb = img.convert('RGB')
                 img_rgb.save(pdf_buffer, format='PDF')

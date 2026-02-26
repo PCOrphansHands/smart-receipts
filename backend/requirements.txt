@@ -24,6 +24,9 @@ google-auth-oauthlib==1.2.0
 # Dropbox
 dropbox==11.36.2
 
+# Image processing
+opencv-python-headless==4.9.0.80
+
 # Utilities
 requests==2.32.3
 beautifulsoup4==4.12.3
