@@ -239,7 +239,7 @@ export class Brain<SecurityDataType = unknown> extends HttpClient<SecurityDataTy
    * @name extract_receipt_data
    * @request POST:/receipt-extraction/extract-receipt-data
    */
-  extract_receipt_data = (data: { image_base64: string }, params: RequestParams = {}) =>
+  extract_receipt_data = (data: { image_base64?: string; images_base64?: string[] }, params: RequestParams = {}) =>
     this.request<any, any>({
       path: `/receipt-extraction/extract-receipt-data`,
       method: "POST",

@@ -59,8 +59,9 @@ class ReceiptData(BaseModel):
     conversion_date: str | None = None
 
 class ExtractReceiptRequest(BaseModel):
-    """Request to extract receipt data from an image"""
-    image_base64: str  # Base64 encoded image data
+    """Request to extract receipt data from one or more images"""
+    image_base64: str | None = None  # Single base64 image (legacy)
+    images_base64: list[str] | None = None  # Multiple base64 images (multi-page)
     
 class ExtractReceiptResponse(BaseModel):
     """Response containing extracted receipt data"""
@@ -712,36 +713,46 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
         Structured receipt data including vendor, date, amount, and confidence level
     """
     try:
-        # Try to auto-crop the receipt from the photo
-        image_base64 = request.image_base64
-        try:
-            raw_image_bytes = base64.b64decode(image_base64)
-            cropped_bytes = crop_receipt(raw_image_bytes)
-            if cropped_bytes:
-                image_base64 = base64.b64encode(cropped_bytes).decode('utf-8')
-                print("Using auto-cropped receipt image for extraction")
-        except Exception as e:
-            print(f"Receipt cropping skipped: {e}")
+        # Build list of images to process (supports single or multi-page)
+        raw_images: list[str] = []
+        if request.images_base64:
+            raw_images = request.images_base64
+        elif request.image_base64:
+            raw_images = [request.image_base64]
+        else:
+            return ExtractReceiptResponse(success=False, data=None, error="No image data provided")
+
+        # Try to auto-crop each page
+        processed_images: list[str] = []
+        for img_b64 in raw_images:
+            try:
+                raw_bytes = base64.b64decode(img_b64)
+                cropped_bytes = crop_receipt(raw_bytes)
+                if cropped_bytes:
+                    processed_images.append(base64.b64encode(cropped_bytes).decode('utf-8'))
+                    print("Using auto-cropped receipt image for extraction")
+                else:
+                    processed_images.append(img_b64)
+            except Exception as e:
+                print(f"Receipt cropping skipped for a page: {e}")
+                processed_images.append(img_b64)
 
         # Initialize OpenAI client
         client = OpenAI(api_key=get_secret("OPENAI_API_KEY"))
 
+        is_multi_page = len(processed_images) > 1
         # Create the prompt for GPT-4 Vision
-        prompt = """
-        Analyze this receipt image and extract the following information:
+        prompt = f"""
+        Analyze {'these receipt images (they are pages of the same receipt)' if is_multi_page else 'this receipt image'} and extract the following information:
         1. Vendor/Merchant name — the company that ISSUED this bill, invoice, or receipt (NOT the customer being billed). Look for the company logo, letterhead, or billing company address. Ignore the customer/account holder name.
         2. Payment date (in MM/DD/YYYY format - American format)
         3. Total amount paid (the final total, not subtotal)
         4. Currency (e.g., USD, EUR, GBP)
 
+        {'The vendor name and date may be on one page while the total amount is on another. Look across ALL pages to find the complete information.' if is_multi_page else ''}
+
         Respond in the following JSON format:
-        {
-            "vendor": "Business Name",
-            "date": "MM/DD/YYYY",
-            "amount": "123.45",
-            "currency": "USD",
-            "confidence": "high/medium/low"
-        }
+        {{"vendor": "Business Name", "date": "MM/DD/YYYY", "amount": "123.45", "currency": "USD", "confidence": "high/medium/low"}}
 
         If you cannot find any of these fields, set them to null.
         Set confidence to:
@@ -750,23 +761,22 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
         - "low" if multiple fields are missing or unclear
         """
 
-        # Call OpenAI Vision API with base64 image
+        # Build message content with all images
+        content: list[dict] = [{"type": "text", "text": prompt}]
+        for img_b64 in processed_images:
+            content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{img_b64}"
+                },
+            })
+
+        print(f"Sending {len(processed_images)} image(s) to OpenAI Vision")
+
+        # Call OpenAI Vision API
         response = client.chat.completions.create(
             model="gpt-4o-mini",
-            messages=[
-                {
-                    "role": "user",
-                    "content": [
-                        {"type": "text", "text": prompt},
-                        {
-                            "type": "image_url",
-                            "image_url": {
-                                "url": f"data:image/jpeg;base64,{image_base64}"
-                            },
-                        },
-                    ],
-                }
-            ],
+            messages=[{"role": "user", "content": content}],
             max_tokens=300,
         )
         

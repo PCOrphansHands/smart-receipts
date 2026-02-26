@@ -32,6 +32,7 @@ export default function UploadReceipts() {
   const [folderPath, setFolderPath] = useState<string>('/Smart_Receipts');
   const [showCamera, setShowCamera] = useState(false);
   const [showUploaded, setShowUploaded] = useState<boolean>(true);
+  const [combineFiles, setCombineFiles] = useState(false);
   const [editingField, setEditingField] = useState<{ key: string; field: string } | null>(null);
   const navigate = useNavigate();
 
@@ -78,13 +79,19 @@ export default function UploadReceipts() {
 
   const processFiles = async (filesToProcess: File[]) => {
     // Filter for PDFs and images only
-    const validFiles = filesToProcess.filter(file => 
-      file.type === 'application/pdf' || 
+    const validFiles = filesToProcess.filter(file =>
+      file.type === 'application/pdf' ||
       file.type.startsWith('image/')
     );
 
     if (validFiles.length === 0) {
       toast.error('Please upload PDF or image files only');
+      return;
+    }
+
+    // If combining multiple files as a single receipt
+    if (combineFiles && validFiles.length > 1) {
+      await processCombinedFiles(validFiles);
       return;
     }
 
@@ -106,8 +113,8 @@ export default function UploadReceipts() {
         const response = await brain.process_uploaded_receipt({ file });
         const data: UploadedReceiptResponse = await response.json();
 
-        setFiles(prev => prev.map(f => 
-          f.id === fileId 
+        setFiles(prev => prev.map(f =>
+          f.id === fileId
             ? { ...f, status: data.success ? 'success' : 'error', data, error: data.error }
             : f
         ));
@@ -126,6 +133,120 @@ export default function UploadReceipts() {
         ));
         toast.error(`Failed to process ${file.name}`);
       }
+    }
+  };
+
+  const processCombinedFiles = async (validFiles: File[]) => {
+    const fileId = `combined-${Date.now()}`;
+    const fileNames = validFiles.map(f => f.name).join(' + ');
+
+    setFiles(prev => [...prev, {
+      id: fileId,
+      originalName: `Combined: ${fileNames}`,
+      status: 'processing' as const,
+    }]);
+
+    try {
+      // Convert all image files to base64 for AI extraction
+      const imageFiles = validFiles.filter(f => f.type.startsWith('image/'));
+      const pdfFiles = validFiles.filter(f => f.type === 'application/pdf');
+
+      const imageBase64List: string[] = [];
+      for (const file of imageFiles) {
+        const arrayBuffer = await file.arrayBuffer();
+        const base64 = btoa(
+          new Uint8Array(arrayBuffer).reduce((str, byte) => str + String.fromCharCode(byte), '')
+        );
+        imageBase64List.push(base64);
+      }
+
+      // For PDF files, send the first one through the backend for extraction + image conversion
+      let pdfData: UploadedReceiptResponse | null = null;
+      if (pdfFiles.length > 0) {
+        const response = await brain.process_uploaded_receipt({ file: pdfFiles[0] });
+        pdfData = await response.json();
+      }
+
+      // Send all images to AI for extraction (AI sees all pages at once)
+      let receiptData;
+      if (imageBase64List.length > 0) {
+        const extractResponse = await brain.extract_receipt_data(
+          imageBase64List.length > 1
+            ? { images_base64: imageBase64List }
+            : { image_base64: imageBase64List[0] }
+        );
+        const extractData = await extractResponse.json();
+
+        if (!extractData.success || !extractData.data) {
+          throw new Error(extractData.error || 'Failed to extract receipt data');
+        }
+        receiptData = extractData.data;
+      } else if (pdfData?.success && pdfData.receipt_data) {
+        receiptData = pdfData.receipt_data;
+      } else {
+        throw new Error('No valid files to extract data from');
+      }
+
+      // Generate filename from extracted data
+      const cleanVendor = (receiptData.vendor || 'Unknown')
+        .replace(/[^a-zA-Z0-9]/g, '')
+        .toUpperCase();
+      const formattedDate = receiptData.date ? convertDateFormat(receiptData.date) : 'Unknown';
+      const amount = receiptData.amount || '0';
+      const suggestedFilename = `${cleanVendor}_${formattedDate}_${amount}.pdf`;
+
+      // Build a multi-page PDF from all image files
+      const pdf = new jsPDF();
+
+      for (let i = 0; i < imageBase64List.length; i++) {
+        if (i > 0) pdf.addPage();
+        const img = new Image();
+        img.src = `data:image/jpeg;base64,${imageBase64List[i]}`;
+
+        await new Promise((resolve) => {
+          img.onload = () => {
+            const imgWidth = 190;
+            const imgHeight = (img.height * imgWidth) / img.width;
+            pdf.addImage(img, 'JPEG', 10, 10, imgWidth, imgHeight);
+            resolve(null);
+          };
+        });
+      }
+
+      let pdfBase64: string;
+      if (imageBase64List.length > 0) {
+        pdfBase64 = pdf.output('datauristring').split(',')[1];
+      } else if (pdfData?.pdf_content) {
+        pdfBase64 = pdfData.pdf_content;
+      } else {
+        pdfBase64 = pdf.output('datauristring').split(',')[1];
+      }
+
+      setFiles(prev => prev.map(f =>
+        f.id === fileId
+          ? {
+              ...f,
+              status: 'success',
+              data: {
+                success: true,
+                receipt_data: receiptData,
+                suggested_filename: suggestedFilename,
+                pdf_content: pdfBase64,
+                original_filename: fileNames,
+              }
+            }
+          : f
+      ));
+
+      toast.success(`Combined ${validFiles.length} files: ${suggestedFilename}`);
+    } catch (error) {
+      apiLogger.error('Failed to process combined files', error);
+      setFiles(prev => prev.map(f =>
+        f.id === fileId
+          ? { ...f, status: 'error', error: error instanceof Error ? error.message : 'Failed to process files' }
+          : f
+      ));
+      toast.error('Failed to process combined files');
     }
   };
 
@@ -150,11 +271,14 @@ export default function UploadReceipts() {
     }
   };
 
-  const handleCameraCapture = async (base64Image: string) => {
+  const handleCameraCapture = async (base64Images: string[]) => {
     setShowCamera(false);
 
     const fileId = `camera-${Date.now()}`;
-    const fileName = `camera-receipt-${Date.now()}.jpg`;
+    const pageCount = base64Images.length;
+    const fileName = pageCount > 1
+      ? `camera-receipt-${Date.now()}-${pageCount}pages.jpg`
+      : `camera-receipt-${Date.now()}.jpg`;
 
     // Add to files list as processing
     setFiles(prev => [...prev, {
@@ -164,10 +288,12 @@ export default function UploadReceipts() {
     }]);
 
     try {
-      // Extract receipt data using OpenAI Vision
-      const extractResponse = await brain.extract_receipt_data({
-        image_base64: base64Image,
-      });
+      // Extract receipt data using OpenAI Vision (send all pages)
+      const extractResponse = await brain.extract_receipt_data(
+        base64Images.length > 1
+          ? { images_base64: base64Images }
+          : { image_base64: base64Images[0] }
+      );
       const extractData = await extractResponse.json();
 
       if (!extractData.success || !extractData.data) {
@@ -177,39 +303,42 @@ export default function UploadReceipts() {
       const receiptData = extractData.data;
 
       // Generate suggested filename with proper date format
-      // Clean vendor name (remove special characters and spaces, convert to uppercase)
       const cleanVendor = (receiptData.vendor || 'Unknown')
         .replace(/[^a-zA-Z0-9]/g, '')
         .toUpperCase();
 
-      // Convert date from MM/DD/YYYY to YYYY.MM.DD
       const formattedDate = receiptData.date ? convertDateFormat(receiptData.date) : 'Unknown';
       const amount = receiptData.amount || '0';
       const suggestedFilename = `${cleanVendor}_${formattedDate}_${amount}.pdf`;
 
-      // Convert image to PDF using jsPDF
+      // Convert all images to a multi-page PDF using jsPDF
       const pdf = new jsPDF();
-      const img = new Image();
-      img.src = `data:image/jpeg;base64,${base64Image}`;
-      
-      await new Promise((resolve) => {
-        img.onload = () => {
-          const imgWidth = 190; // A4 width minus margins
-          const imgHeight = (img.height * imgWidth) / img.width;
-          pdf.addImage(img, 'JPEG', 10, 10, imgWidth, imgHeight);
-          resolve(null);
-        };
-      });
+
+      for (let i = 0; i < base64Images.length; i++) {
+        if (i > 0) pdf.addPage();
+
+        const img = new Image();
+        img.src = `data:image/jpeg;base64,${base64Images[i]}`;
+
+        await new Promise((resolve) => {
+          img.onload = () => {
+            const imgWidth = 190; // A4 width minus margins
+            const imgHeight = (img.height * imgWidth) / img.width;
+            pdf.addImage(img, 'JPEG', 10, 10, imgWidth, imgHeight);
+            resolve(null);
+          };
+        });
+      }
 
       // Get PDF as base64
       const pdfBase64 = pdf.output('datauristring').split(',')[1];
 
       // Update file status with extracted data
-      setFiles(prev => prev.map(f => 
-        f.id === fileId 
-          ? { 
-              ...f, 
-              status: 'success', 
+      setFiles(prev => prev.map(f =>
+        f.id === fileId
+          ? {
+              ...f,
+              status: 'success',
               data: {
                 success: true,
                 receipt_data: receiptData,
@@ -221,7 +350,7 @@ export default function UploadReceipts() {
           : f
       ));
 
-      toast.success(`Captured and processed: ${suggestedFilename}`);
+      toast.success(`Captured and processed: ${suggestedFilename}${pageCount > 1 ? ` (${pageCount} pages)` : ''}`);
     } catch (error) {
       apiLogger.error('Failed to process camera image', error);
       setFiles(prev => prev.map(f =>
@@ -494,6 +623,20 @@ export default function UploadReceipts() {
                 <p className="text-sm text-gray-500 mt-4">
                   {t('upload.dropzone.support')}
                 </p>
+
+                {/* Combine files toggle */}
+                <div className="flex items-center justify-center gap-2 mt-4 pt-4 border-t border-gray-200">
+                  <input
+                    type="checkbox"
+                    id="combine-files"
+                    checked={combineFiles}
+                    onChange={(e) => setCombineFiles(e.target.checked)}
+                    className="rounded border-gray-300"
+                  />
+                  <label htmlFor="combine-files" className="text-sm text-gray-600 cursor-pointer">
+                    Combine multiple files as a single receipt (e.g., itemized receipt + payment slip)
+                  </label>
+                </div>
               </div>
             </CardContent>
           </Card>
