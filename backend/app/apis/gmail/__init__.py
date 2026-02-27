@@ -12,6 +12,7 @@ from app.env import mode, Mode
 from app.config import get_settings, get_secret
 import asyncpg
 from app.auth import AuthorizedUser
+from app.libs.token_encryption import encrypt_token, decrypt_token
 from typing import Annotated
 from fastapi import Depends
 import secrets
@@ -19,10 +20,9 @@ import asyncio
 
 router = APIRouter(prefix="/gmail")
 
-# Gmail API scopes - we need modify to download attachments
+# Gmail API scopes - readonly is sufficient for reading emails and attachments
 SCOPES = [
     'https://www.googleapis.com/auth/gmail.readonly',
-    'https://www.googleapis.com/auth/gmail.modify'
 ]
 
 class AuthUrlResponse(BaseModel):
@@ -280,8 +280,9 @@ async def gmail_auth_callback(code: str, state: str | None = None):
             'scopes': credentials.scopes
         }
         
-        # Save to database
-        print(f"Saving tokens to database for user_id: {user_id}")
+        # Encrypt and save to database
+        print(f"Saving encrypted tokens to database for user_id: {user_id}")
+        encrypted_token_data = encrypt_token(json.dumps(token_data))
         conn = await asyncpg.connect(database_url)
         try:
             await conn.execute(
@@ -292,7 +293,7 @@ async def gmail_auth_callback(code: str, state: str | None = None):
                 DO UPDATE SET token_data = $2, updated_at = CURRENT_TIMESTAMP
                 """,
                 user_id,
-                json.dumps(token_data)
+                encrypted_token_data
             )
             print("Tokens saved successfully!")
         finally:
@@ -362,7 +363,7 @@ async def get_gmail_service(user: AuthorizedUser):
                     detail="Gmail not authenticated. Please complete OAuth flow first."
                 )
             
-            token_data = json.loads(row['token_data'])
+            token_data = json.loads(decrypt_token(row['token_data']))
         finally:
             await conn.close()
         

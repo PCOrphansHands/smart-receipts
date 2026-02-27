@@ -140,7 +140,12 @@ def create_app() -> FastAPI:
     supabase_config = get_supabase_auth_config()
 
     if supabase_config is None:
-        print("Warning: No Supabase auth config found - authentication will be disabled")
+        if settings.is_production():
+            raise RuntimeError(
+                "SUPABASE_JWT_SECRET is required in production. "
+                "Set this environment variable before starting the server."
+            )
+        print("Warning: No Supabase auth config found - authentication will be disabled in development")
         app.state.auth_config = None
     else:
         print(f"Supabase auth configured with JWT Secret (HS256) - User authentication enabled")

@@ -12,6 +12,7 @@ import asyncpg
 from app.auth import AuthorizedUser
 from app.env import Mode, mode
 from app.config import get_settings, get_secret
+from app.libs.token_encryption import encrypt_token, decrypt_token
 
 router = APIRouter(prefix="/dropbox")
 
@@ -80,7 +81,7 @@ async def _get_dropbox_token(user_id: str) -> str | None:
                 "SELECT refresh_token FROM dropbox_tokens WHERE user_id = $1",
                 user_id
             )
-            return row['refresh_token'] if row else None
+            return decrypt_token(row['refresh_token']) if row else None
         finally:
             await conn.close()
     except Exception as e:
@@ -263,8 +264,9 @@ async def dropbox_callback(code: str, state: str):
             </html>
             """)
 
-        # Store refresh token in database for the user
+        # Encrypt and store refresh token in database for the user
         if user_id:
+            encrypted_refresh_token = encrypt_token(refresh_token)
             conn = await asyncpg.connect(settings.DATABASE_URL)
             try:
                 await conn.execute(
@@ -275,7 +277,7 @@ async def dropbox_callback(code: str, state: str):
                     DO UPDATE SET refresh_token = $2, updated_at = CURRENT_TIMESTAMP
                     """,
                     user_id,
-                    refresh_token
+                    encrypted_refresh_token
                 )
                 print(f"Dropbox OAuth successful! Refresh token stored for user {user_id}")
             finally:

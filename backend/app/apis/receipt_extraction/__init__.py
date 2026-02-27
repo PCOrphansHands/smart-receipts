@@ -17,6 +17,9 @@ from app.config import get_secret
 
 router = APIRouter(prefix="/receipt-extraction")
 
+# Maximum upload file size: 20MB
+MAX_UPLOAD_SIZE = 20 * 1024 * 1024
+
 # Helper function to convert date format
 def convert_date_format(date_str: str) -> str:
     """
@@ -871,10 +874,15 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
     """
     try:
         print(f"Processing uploaded file: {file.filename}, type: {file.content_type}")
-        
-        # Read file content
+
+        # Read file content with size limit
         file_content = await file.read()
-        
+        if len(file_content) > MAX_UPLOAD_SIZE:
+            raise HTTPException(
+                status_code=413,
+                detail=f"File too large. Maximum size is {MAX_UPLOAD_SIZE // (1024 * 1024)}MB."
+            )
+
         # Check file type and convert to base64 image for processing
         if file.content_type == 'application/pdf':
             # For PDFs, convert first page to image

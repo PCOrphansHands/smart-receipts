@@ -54,9 +54,10 @@ def get_authorized_user(
     try:
         auth_config = get_auth_config(request)
     except HTTPException:
-        # Auth not configured - return dummy user for development
-        print("Auth not configured, using anonymous user")
-        return User(sub="anonymous", user_id="anonymous")
+        raise HTTPException(
+            status_code=HTTPStatus.UNAUTHORIZED,
+            detail="Authentication is not configured. Set SUPABASE_JWT_SECRET."
+        )
 
     try:
         if isinstance(request, WebSocket):
