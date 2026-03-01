@@ -19,6 +19,7 @@ from app.config import get_secret
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from app.libs.constants import MAX_UPLOAD_SIZE
+from app.libs.date_utils import convert_date_format
 
 logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
@@ -40,35 +41,6 @@ async def get_browser():
     return _browser_instance
 
 router = APIRouter(prefix="/receipt-extraction")
-
-# MAX_UPLOAD_SIZE imported from app.libs.constants
-
-# Helper function to convert date format
-def convert_date_format(date_str: str) -> str:
-    """
-    Convert date to YYYY.MM.DD format from MM/DD/YYYY format.
-    Handles slashes, dots, and dashes as separators.
-
-    Args:
-        date_str: Date in MM/DD/YYYY format (or with dots/dashes as separators)
-
-    Returns:
-        Date in YYYY.MM.DD format (e.g., "2024.10.25")
-    """
-    try:
-        # Replace all common separators with slashes for consistent parsing
-        normalized = date_str.replace('.', '/').replace('-', '/')
-
-        # Split on slashes - expecting MM/DD/YYYY format
-        if '/' in normalized:
-            parts = normalized.split('/')
-            if len(parts) == 3:
-                month, day, year = parts  # MM/DD/YYYY format
-                return f"{year}.{month.zfill(2)}.{day.zfill(2)}"
-
-        return date_str  # Return original if format doesn't match
-    except Exception:
-        return date_str  # Return original if conversion fails
 
 # Response models
 class ReceiptData(BaseModel):

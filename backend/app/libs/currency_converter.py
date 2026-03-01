@@ -2,6 +2,7 @@
 
 Provides functions to fetch historical exchange rates and convert currencies.
 """
+from __future__ import annotations
 
 import logging
 import requests

@@ -42,3 +42,6 @@ slowapi==0.1.9
 
 # Retry logic
 tenacity==8.2.3
+
+# Testing
+pytest==8.3.4
