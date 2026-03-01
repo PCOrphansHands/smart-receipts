@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { toast } from 'sonner';
-import type { ReceiptEmailsResponse, AttachmentsResponse, ProcessReceiptResponse, DropboxStatusResponse, ReceiptUploadStatus } from 'types';
+import type { ReceiptEmailsResponse, AttachmentsResponse, ProcessReceiptResponse, DropboxStatusResponse, ReceiptUploadStatus, GmailStatusResponse, GetUploadStatusResponse } from 'types';
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, FileText, CheckCircle2, Upload, FolderOpen, LogOut, Filter, CheckCheck, Pencil } from 'lucide-react';
@@ -13,7 +13,8 @@ import LanguageSelector from 'components/LanguageSelector';
 import { useNavigate } from 'react-router-dom';
 import { auth } from 'app/auth';
 import { useUserGuardContext } from 'app/auth/UserGuard';
-import { authLogger } from 'utils/logger';
+import { authLogger, apiLogger } from 'utils/logger';
+import { convertDateFormat, generateFilename, sanitizeVendor } from 'utils/receiptFilename';
 
 export default function GmailSetup() {
   const { t } = useTranslation();
@@ -22,9 +23,7 @@ export default function GmailSetup() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [emails, setEmails] = useState<ReceiptEmailsResponse | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
-  const [subjectSearch, setSubjectSearch] = useState("");
+  const [filters, setFilters] = useState({ startDate: "", endDate: "", subjectSearch: "" });
   const [expandedEmail, setExpandedEmail] = useState<string | null>(null);
   const [emailAttachments, setEmailAttachments] = useState<Record<string, AttachmentsResponse>>({});
   const [processingAttachment, setProcessingAttachment] = useState<string | null>(null);
@@ -45,10 +44,10 @@ export default function GmailSetup() {
       
       try {
         const response = await brain.get_gmail_status();
-        const data = await response.json();
+        const data: GmailStatusResponse = await response.json();
         setIsAuthenticated(data.connected);
       } catch (error: unknown) {
-        console.error('Failed to check Gmail status:', error);
+        apiLogger.error('Failed to check Gmail status', error);
       }
     };
     
@@ -70,10 +69,10 @@ export default function GmailSetup() {
   const checkDropboxStatus = async () => {
     try {
       const response = await brain.get_dropbox_status();
-      const data = await response.json();
+      const data: DropboxStatusResponse = await response.json();
       setDropboxStatus(data);
     } catch (error: unknown) {
-      console.error('Failed to check Dropbox status:', error);
+      apiLogger.error('Failed to check Dropbox status', error);
     }
   };
 
@@ -96,13 +95,13 @@ export default function GmailSetup() {
       if (receiptKeys.length === 0) return;
 
       const response = await brain.get_upload_status({ receipt_keys: receiptKeys });
-      const data = await response.json();
+      const data: GetUploadStatusResponse = await response.json();
 
       if (data.success) {
         setUploadStatuses(data.statuses || {});
       }
     } catch (error: unknown) {
-      console.error('Failed to load upload statuses:', error);
+      apiLogger.error('Failed to load upload statuses', error);
     }
   };
 
@@ -126,7 +125,7 @@ export default function GmailSetup() {
         toast.error('Failed to disconnect Gmail');
       }
     } catch (error: unknown) {
-      console.error('Gmail disconnect failed:', error);
+      apiLogger.error('Gmail disconnect failed', error);
       toast.error('Failed to disconnect Gmail');
     } finally {
       setLoading(false);
@@ -173,8 +172,7 @@ export default function GmailSetup() {
         const date = receiptData.date ? convertDateFormat(receiptData.date) : 'Unknown';
         const usdAmount = receiptData.usd_amount;
 
-        // Sanitize vendor name
-        const safeVendor = vendor.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s/g, '_').substring(0, 30);
+        const safeVendor = sanitizeVendor(vendor);
         const usdFilename = `${safeVendor}_${date}_${usdAmount}USD.pdf`;
 
         const usdResponse = await brain.upload_to_dropbox({
@@ -225,13 +223,13 @@ export default function GmailSetup() {
           }
         }));
       } catch (trackError: unknown) {
-        console.error('Failed to track upload status:', trackError);
+        apiLogger.warn('Failed to track upload status', trackError);
         // Don't fail the upload if tracking fails
       }
 
       toast.success(message);
     } catch (error: unknown) {
-      console.error('Failed to upload to Dropbox:', error);
+      apiLogger.error('Failed to upload to Dropbox', error);
       toast.error('Failed to upload to Dropbox');
     } finally {
       setUploadingToDropbox(null);
@@ -312,25 +310,23 @@ export default function GmailSetup() {
       // Convert dates from YYYY-MM-DD to YYYY/MM/DD format for Gmail
       const params: { start_date?: string; end_date?: string; subject_search?: string } = {};
 
-      if (startDate) {
-        params.start_date = startDate.replace(/-/g, '/');
+      if (filters.startDate) {
+        params.start_date = filters.startDate.replace(/-/g, '/');
       }
-      if (endDate) {
-        params.end_date = endDate.replace(/-/g, '/');
+      if (filters.endDate) {
+        params.end_date = filters.endDate.replace(/-/g, '/');
       }
-      if (subjectSearch.trim()) {
-        params.subject_search = subjectSearch.trim();
+      if (filters.subjectSearch.trim()) {
+        params.subject_search = filters.subjectSearch.trim();
       }
 
       const response = await brain.scan_receipt_emails(params);
-      const data = await response.json();
-      console.log('Scanned emails:', data);
-      console.log('First email has_attachments:', data.emails[0]?.has_attachments);
+      const data: ReceiptEmailsResponse = await response.json();
       setEmails(data);
       toast.success(`Found ${data.count} receipt emails!`);
     } catch (error: unknown) {
       toast.error("Failed to scan emails");
-      console.error(error);
+      apiLogger.error('Failed to scan emails', error);
     } finally {
       setLoading(false);
     }
@@ -345,10 +341,10 @@ export default function GmailSetup() {
       if (!emailAttachments[emailId]) {
         try {
           const response = await brain.get_email_attachments({ emailId });
-          const data = await response.json();
+          const data: AttachmentsResponse = await response.json();
           setEmailAttachments(prev => ({ ...prev, [emailId]: data }));
         } catch (error: unknown) {
-          console.error('Failed to fetch attachments:', error);
+          apiLogger.error('Failed to fetch attachments', error);
           toast.error('Failed to load attachments');
         }
       }
@@ -364,8 +360,8 @@ export default function GmailSetup() {
         email_id: emailId,
         attachment_filename: filename
       });
-      const data = await response.json();
-      
+      const data: ProcessReceiptResponse = await response.json();
+
       if (data.success) {
         setProcessedReceipts(prev => ({ ...prev, [attachmentKey]: data }));
         toast.success(`Receipt processed! ${data.suggested_filename || 'Data extracted'}`);
@@ -373,7 +369,7 @@ export default function GmailSetup() {
         toast.error(data.error || 'Failed to process receipt');
       }
     } catch (error: unknown) {
-      console.error('Failed to process receipt:', error);
+      apiLogger.error('Failed to process receipt', error);
       toast.error('Failed to process receipt');
     } finally {
       setProcessingAttachment(null);
@@ -397,9 +393,9 @@ export default function GmailSetup() {
           const month = String(emailDate.getMonth() + 1).padStart(2, '0');
           const year = emailDate.getFullYear();
           formattedDate = `${day}.${month}.${year}`;
-          console.log('Formatted email date as fallback:', formattedDate);
+          apiLogger.debug('Formatted email date as fallback', formattedDate);
         } catch (e: unknown) {
-          console.warn('Failed to parse email date:', e);
+          apiLogger.warn('Failed to parse email date', e);
         }
       }
       
@@ -407,8 +403,8 @@ export default function GmailSetup() {
         email_id: emailId,
         email_date: formattedDate
       });
-      const data = await response.json();
-      
+      const data: ProcessReceiptResponse = await response.json();
+
       if (data.success) {
         setProcessedReceipts(prev => ({ ...prev, [emailKey]: data }));
         toast.success(`Email processed! ${data.suggested_filename || 'Data extracted'}`);
@@ -416,37 +412,14 @@ export default function GmailSetup() {
         toast.error(data.error || 'Failed to process email body');
       }
     } catch (error: unknown) {
-      console.error('Failed to process email body:', error);
+      apiLogger.error('Failed to process email body', error);
       toast.error('Failed to process email body');
     } finally {
       setProcessingEmailBody(null);
     }
   };
 
-  // Helper to convert date format from MM/DD/YYYY to YYYY.MM.DD
-  const convertDateFormat = (dateStr: string): string => {
-    try {
-      const normalized = dateStr.replace(/\./g, '/').replace(/-/g, '/');
-      if (normalized.includes('/')) {
-        const parts = normalized.split('/');
-        if (parts.length === 3) {
-          const [month, day, year] = parts;
-          return `${year}.${month.padStart(2, '0')}.${day.padStart(2, '0')}`;
-        }
-      }
-      return dateStr;
-    } catch {
-      return dateStr;
-    }
-  };
-
-  const generateFilename = (vendor: string | null, date: string | null, amount: string | null, currentFilename: string | null): string | null => {
-    if (!vendor || !date || !amount) return currentFilename;
-    const cleanVendor = vendor.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const formattedDate = convertDateFormat(date);
-    const extension = currentFilename?.split('.').pop() || 'pdf';
-    return `${cleanVendor}_${formattedDate}_${amount}.${extension}`;
-  };
+  // convertDateFormat, generateFilename, and sanitizeVendor are imported from utils/receiptFilename
 
   const updateReceiptField = (receiptKey: string, field: 'vendor' | 'date' | 'amount', value: string) => {
     setProcessedReceipts(prev => {
@@ -593,8 +566,8 @@ export default function GmailSetup() {
                       id="subject-search"
                       type="text"
                       placeholder="e.g., Amazon, Uber, Restaurant name..."
-                      value={subjectSearch}
-                      onChange={(e) => setSubjectSearch(e.target.value)}
+                      value={filters.subjectSearch}
+                      onChange={(e) => setFilters(f => ({ ...f, subjectSearch: e.target.value }))}
                       className="mt-1"
                     />
                     <p className="text-xs text-gray-500 mt-1">
@@ -607,8 +580,8 @@ export default function GmailSetup() {
                       <Input
                         id="start-date"
                         type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
+                        value={filters.startDate}
+                        onChange={(e) => setFilters(f => ({ ...f, startDate: e.target.value }))}
                         className="mt-1"
                       />
                     </div>
@@ -617,8 +590,8 @@ export default function GmailSetup() {
                       <Input
                         id="end-date"
                         type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
+                        value={filters.endDate}
+                        onChange={(e) => setFilters(f => ({ ...f, endDate: e.target.value }))}
                         className="mt-1"
                       />
                     </div>

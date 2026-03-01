@@ -16,6 +16,7 @@ from app.config import get_settings, get_secret
 from app.libs.token_encryption import encrypt_token, decrypt_token
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from app.libs.constants import OAUTH_STATE_EXPIRY_MINUTES
 
 logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
@@ -51,10 +52,10 @@ async def _validate_oauth_state(state: str) -> tuple[bool, str | None]:
         try:
             # Get state and check if not expired (10 minutes)
             row = await conn.fetchrow(
-                """
+                f"""
                 SELECT user_id FROM dropbox_oauth_states
                 WHERE state_token = $1
-                AND created_at > CURRENT_TIMESTAMP - INTERVAL '10 minutes'
+                AND created_at > CURRENT_TIMESTAMP - INTERVAL '{OAUTH_STATE_EXPIRY_MINUTES} minutes'
                 """,
                 state
             )

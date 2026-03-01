@@ -18,6 +18,7 @@ from app.libs.receipt_cropper import crop_receipt
 from app.config import get_secret
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from app.libs.constants import MAX_UPLOAD_SIZE
 
 logger = logging.getLogger(__name__)
 limiter = Limiter(key_func=get_remote_address)
@@ -40,8 +41,7 @@ async def get_browser():
 
 router = APIRouter(prefix="/receipt-extraction")
 
-# Maximum upload file size: 20MB
-MAX_UPLOAD_SIZE = 20 * 1024 * 1024
+# MAX_UPLOAD_SIZE imported from app.libs.constants
 
 # Helper function to convert date format
 def convert_date_format(date_str: str) -> str:

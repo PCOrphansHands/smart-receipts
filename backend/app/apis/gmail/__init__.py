@@ -20,6 +20,11 @@ import secrets
 import asyncio
 from slowapi import Limiter
 from slowapi.util import get_remote_address
+from app.libs.constants import (
+    DB_CONNECT_TIMEOUT, DB_QUERY_TIMEOUT,
+    DB_CONNECT_TIMEOUT_LONG, DB_QUERY_TIMEOUT_LONG,
+    OAUTH_STATE_EXPIRY_MINUTES, GMAIL_MAX_RESULTS,
+)
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -78,14 +83,14 @@ async def get_gmail_status(user: AuthorizedUser) -> GmailStatusResponse:
         database_url = settings.DATABASE_URL
 
         # Quick database check with 2-second timeout
-        conn = await asyncpg.connect(database_url, timeout=2)
+        conn = await asyncpg.connect(database_url, timeout=DB_CONNECT_TIMEOUT)
         try:
             row = await asyncio.wait_for(
                 conn.fetchrow(
                     "SELECT token_data FROM gmail_tokens WHERE user_id = $1",
                     user.sub
                 ),
-                timeout=2.0
+                timeout=DB_QUERY_TIMEOUT
             )
 
             if row:
@@ -161,7 +166,7 @@ async def start_gmail_auth(request: Request, user: AuthorizedUser):
         database_url = settings.DATABASE_URL
         
         logger.debug("Connecting to database to store state token")
-        conn = await asyncpg.connect(database_url, timeout=3)
+        conn = await asyncpg.connect(database_url, timeout=DB_CONNECT_TIMEOUT_LONG)
         try:
             logger.debug("Inserting state token into database")
             await asyncio.wait_for(
@@ -173,7 +178,7 @@ async def start_gmail_auth(request: Request, user: AuthorizedUser):
                     state_token,
                     user.sub
                 ),
-                timeout=3.0
+                timeout=DB_QUERY_TIMEOUT_LONG
             )
             logger.debug("State token stored successfully")
         finally:
@@ -236,7 +241,7 @@ async def gmail_auth_callback(request: Request, code: str, state: str | None = N
         try:
             # Get user_id from state and delete the state token
             row = await conn.fetchrow(
-                "SELECT user_id FROM gmail_oauth_states WHERE state_token = $1 AND created_at > CURRENT_TIMESTAMP - INTERVAL '10 minutes'",
+                f"SELECT user_id FROM gmail_oauth_states WHERE state_token = $1 AND created_at > CURRENT_TIMESTAMP - INTERVAL '{OAUTH_STATE_EXPIRY_MINUTES} minutes'",
                 state
             )
             
@@ -443,7 +448,7 @@ async def scan_receipt_emails(
         results = service.users().messages().list(
             userId='me',
             q=query,
-            maxResults=50
+            maxResults=GMAIL_MAX_RESULTS
         ).execute()
         
         messages = results.get('messages', [])

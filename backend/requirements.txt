@@ -39,3 +39,6 @@ playwright==1.48.0
 
 # Rate limiting
 slowapi==0.1.9
+
+# Retry logic
+tenacity==8.2.3

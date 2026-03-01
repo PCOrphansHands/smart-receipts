@@ -6,10 +6,21 @@ Provides functions to fetch historical exchange rates and convert currencies.
 import logging
 import requests
 from datetime import datetime
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
+from app.libs.constants import (
+    EXTERNAL_API_TIMEOUT, RETRY_MAX_ATTEMPTS, RETRY_WAIT_SECONDS, RETRY_MAX_WAIT_SECONDS,
+    is_valid_currency,
+)
 
 logger = logging.getLogger(__name__)
 
 
+@retry(
+    stop=stop_after_attempt(RETRY_MAX_ATTEMPTS),
+    wait=wait_exponential(multiplier=RETRY_WAIT_SECONDS, max=RETRY_MAX_WAIT_SECONDS),
+    retry=retry_if_exception_type((requests.ConnectionError, requests.Timeout)),
+    reraise=True,
+)
 def get_exchange_rate(from_currency: str, to_currency: str, date_str: str) -> float | None:
     """
     Get historical exchange rate for a specific date.
@@ -50,7 +61,7 @@ def get_exchange_rate(from_currency: str, to_currency: str, date_str: str) -> fl
         url = f"https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@{api_date}/v1/currencies/{from_curr}.json"
         logger.info("Fetching exchange rate from: %s", url)
         
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, timeout=EXTERNAL_API_TIMEOUT)
         response.raise_for_status()
         
         data = response.json()
@@ -104,9 +115,17 @@ def convert_amount(amount: str, from_currency: str, to_currency: str, date_str: 
         }
     """
     try:
+        # Validate currency codes
+        if not is_valid_currency(from_currency):
+            logger.warning("Invalid source currency code: %s", from_currency)
+            return None
+        if not is_valid_currency(to_currency):
+            logger.warning("Invalid target currency code: %s", to_currency)
+            return None
+
         # Parse amount
         original_amount = float(amount)
-        
+
         # Get exchange rate
         rate = get_exchange_rate(from_currency, to_currency, date_str)
         

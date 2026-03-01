@@ -13,6 +13,7 @@ import CameraCapture from 'components/CameraCapture';
 import jsPDF from 'jspdf';
 import { auth } from 'app/auth';
 import { apiLogger, uiLogger } from 'utils/logger';
+import { convertDateFormat, generateFilename, sanitizeVendor } from 'utils/receiptFilename';
 
 interface ProcessedFile {
   id: string;
@@ -254,26 +255,7 @@ export default function UploadReceipts() {
     }
   };
 
-  // Helper function to convert date format from MM/DD/YYYY to YYYY.MM.DD
-  const convertDateFormat = (dateStr: string): string => {
-    try {
-      // Replace all common separators with slashes for consistent parsing
-      const normalized = dateStr.replace(/\./g, '/').replace(/-/g, '/');
-
-      // Split on slashes - expecting MM/DD/YYYY format
-      if (normalized.includes('/')) {
-        const parts = normalized.split('/');
-        if (parts.length === 3) {
-          const [month, day, year] = parts;
-          return `${year}.${month.padStart(2, '0')}.${day.padStart(2, '0')}`;
-        }
-      }
-
-      return dateStr; // Return original if format doesn't match
-    } catch {
-      return dateStr; // Return original if conversion fails
-    }
-  };
+  // convertDateFormat, generateFilename, and sanitizeVendor are imported from utils/receiptFilename
 
   const handleCameraCapture = async (base64Images: string[]) => {
     setShowCamera(false);
@@ -408,8 +390,7 @@ export default function UploadReceipts() {
           const date = receiptData.date ? convertDateFormat(receiptData.date) : 'Unknown';
           const usdAmount = receiptData.usd_amount;
 
-          // Sanitize vendor name
-          const safeVendor = vendor.replace(/[^a-zA-Z0-9\s-]/g, '').replace(/\s/g, '_').substring(0, 30);
+          const safeVendor = sanitizeVendor(vendor);
           const usdFilename = `${safeVendor}_${date}_${usdAmount}USD.pdf`;
 
           const usdResponse = await brain.upload_to_dropbox({
@@ -481,13 +462,7 @@ export default function UploadReceipts() {
     setFiles([]);
   };
 
-  const generateFilename = (vendor: string | null, date: string | null, amount: string | null, currentFilename: string | null): string | null => {
-    if (!vendor || !date || !amount) return currentFilename;
-    const cleanVendor = vendor.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
-    const formattedDate = convertDateFormat(date);
-    const extension = currentFilename?.split('.').pop() || 'pdf';
-    return `${cleanVendor}_${formattedDate}_${amount}.${extension}`;
-  };
+  // generateFilename is imported from utils/receiptFilename
 
   const updateFileField = (fileId: string, field: 'vendor' | 'date' | 'amount', value: string) => {
     setFiles(prev => prev.map(f => {
