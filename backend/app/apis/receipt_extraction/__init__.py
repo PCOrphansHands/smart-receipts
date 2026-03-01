@@ -1,4 +1,6 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File
+import logging
+
+from fastapi import APIRouter, HTTPException, UploadFile, File, Request
 from pydantic import BaseModel
 from openai import OpenAI
 import base64
@@ -14,6 +16,27 @@ from app.auth import AuthorizedUser
 from app.libs.currency_converter import convert_amount
 from app.libs.receipt_cropper import crop_receipt
 from app.config import get_secret
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
+
+# Reusable Playwright browser instance (avoids launching Chromium per request)
+_playwright_instance = None
+_browser_instance = None
+
+
+async def get_browser():
+    """Get or create a reusable Playwright browser instance."""
+    global _playwright_instance, _browser_instance
+    if _browser_instance is None or not _browser_instance.is_connected():
+        from playwright.async_api import async_playwright
+        if _playwright_instance is None:
+            _playwright_instance = await async_playwright().start()
+        _browser_instance = await _playwright_instance.chromium.launch()
+        logger.info("Launched reusable Playwright browser instance")
+    return _browser_instance
 
 router = APIRouter(prefix="/receipt-extraction")
 
@@ -100,7 +123,8 @@ class UploadedReceiptResponse(BaseModel):
     original_filename: str | None = None
 
 @router.post("/process-gmail-receipt")
-async def process_gmail_receipt(request: ProcessReceiptRequest, user: AuthorizedUser) -> ProcessReceiptResponse:
+@limiter.limit("20/minute")
+async def process_gmail_receipt(request: Request, body: ProcessReceiptRequest, user: AuthorizedUser) -> ProcessReceiptResponse:
     """
     Download a receipt attachment from Gmail and extract its data.
     Returns extracted data and suggested filename in format: VENDOR_YYYY.MM.DD_Total
@@ -121,16 +145,16 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
         # Get the full message to find the attachment
         message = service.users().messages().get(
             userId='me',
-            id=request.email_id
+            id=body.email_id
         ).execute()
-        
+
         # Find the attachment by filename
         attachment_id = None
         attachment_mime_type = None
-        
+
         if 'parts' in message['payload']:
             for part in message['payload']['parts']:
-                if part.get('filename') == request.attachment_filename:
+                if part.get('filename') == body.attachment_filename:
                     attachment_id = part['body'].get('attachmentId')
                     attachment_mime_type = part.get('mimeType', '')
                     break
@@ -139,7 +163,7 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
             return ProcessReceiptResponse(
                 success=False,
                 receipt_data=None,
-                error=f"Attachment '{request.attachment_filename}' not found in email",
+                error=f"Attachment '{body.attachment_filename}' not found in email",
                 suggested_filename=None,
                 pdf_content=None
             )
@@ -147,7 +171,7 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
         # Download the attachment
         attachment = service.users().messages().attachments().get(
             userId='me',
-            messageId=request.email_id,
+            messageId=body.email_id,
             id=attachment_id
         ).execute()
         
@@ -173,7 +197,7 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
                 img.convert('RGB').save(pdf_buffer, format='PDF')
                 pdf_content_base64 = base64.b64encode(pdf_buffer.getvalue()).decode('utf-8')
             except Exception as e:
-                print(f"Warning: Could not convert image to PDF: {e}")
+                logger.warning("Could not convert image to PDF: %s", e)
             
         elif attachment_mime_type == 'application/pdf':
             # PDF - store original for upload
@@ -252,8 +276,8 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
         )
         
         raw_response = response.choices[0].message.content
-        print(f"OpenAI Vision response: {raw_response}")
-        
+        logger.debug("OpenAI Vision response: %s", raw_response)
+
         # Parse the JSON response
         import json
         try:
@@ -264,9 +288,9 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
                 json_str = raw_response.split("```")[1].split("```")[0].strip()
             else:
                 json_str = raw_response.strip()
-            
+
             parsed_data = json.loads(json_str)
-            
+
             receipt_data = ReceiptData(
                 vendor=parsed_data.get("vendor"),
                 date=parsed_data.get("date"),
@@ -275,30 +299,30 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
                 confidence=parsed_data.get("confidence", "low"),
                 raw_response=raw_response
             )
-            
+
             # Use email date as fallback if no date found in receipt
-            if not receipt_data.date and request.email_date:
-                receipt_data.date = request.email_date
-                print(f"Using email date as fallback: {request.email_date}")
-            
+            if not receipt_data.date and body.email_date:
+                receipt_data.date = body.email_date
+                logger.info("Using email date as fallback: %s", body.email_date)
+
             # Convert to USD if currency is not USD
             if receipt_data.currency and receipt_data.currency.upper() != 'USD' and receipt_data.amount and receipt_data.date:
-                print(f"Non-USD currency detected: {receipt_data.currency}. Converting to USD...")
+                logger.info("Non-USD currency detected: %s. Converting to USD...", receipt_data.currency)
                 conversion_result = convert_amount(
                     receipt_data.amount,
                     receipt_data.currency.upper(),
                     'USD',
                     receipt_data.date
                 )
-                
+
                 if conversion_result:
                     receipt_data.usd_amount = str(conversion_result['converted_amount'])
                     receipt_data.exchange_rate = conversion_result['exchange_rate']
                     receipt_data.conversion_date = conversion_result['date']
-                    print(f"Converted: {receipt_data.amount} {receipt_data.currency} = {receipt_data.usd_amount} USD")
+                    logger.info("Converted: %s %s = %s USD", receipt_data.amount, receipt_data.currency, receipt_data.usd_amount)
                 else:
-                    print(f"Warning: Could not convert {receipt_data.currency} to USD")
-            
+                    logger.warning("Could not convert %s to USD", receipt_data.currency)
+
             # Generate suggested filename: VENDOR_YYYY.MM.DD_Total
             suggested_filename = None
             if receipt_data.vendor and receipt_data.date and receipt_data.amount:
@@ -310,10 +334,10 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
                 formatted_date = convert_date_format(receipt_data.date)
 
                 # Get file extension from original
-                extension = request.attachment_filename.split('.')[-1] if '.' in request.attachment_filename else 'jpg'
+                extension = body.attachment_filename.split('.')[-1] if '.' in body.attachment_filename else 'jpg'
 
                 suggested_filename = f"{clean_vendor}_{formatted_date}_{receipt_data.amount}.{extension}"
-            
+
             return ProcessReceiptResponse(
                 success=True,
                 receipt_data=receipt_data,
@@ -321,9 +345,9 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
                 suggested_filename=suggested_filename,
                 pdf_content=pdf_content_base64
             )
-            
+
         except json.JSONDecodeError as e:
-            print(f"Failed to parse JSON: {e}")
+            logger.error("Failed to parse JSON: %s", e)
             return ProcessReceiptResponse(
                 success=False,
                 receipt_data=ReceiptData(
@@ -338,7 +362,7 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
                 suggested_filename=None,
                 pdf_content=None
             )
-            
+
     except HttpError as e:
         return ProcessReceiptResponse(
             success=False,
@@ -348,9 +372,7 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
             pdf_content=None
         )
     except Exception as e:
-        print(f"Error processing receipt: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error processing receipt")
         return ProcessReceiptResponse(
             success=False,
             receipt_data=None,
@@ -360,7 +382,8 @@ async def process_gmail_receipt(request: ProcessReceiptRequest, user: Authorized
         )
 
 @router.post("/process-email-body")
-async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedUser) -> ProcessReceiptResponse:
+@limiter.limit("20/minute")
+async def process_email_body(request: Request, body: ProcessEmailBodyRequest, user: AuthorizedUser) -> ProcessReceiptResponse:
     """
     Convert an email body to PDF and extract receipt data from it.
     For emails that don't have attachments but contain receipt info in the body.
@@ -376,14 +399,13 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
         from app.apis.gmail import get_gmail_service
         from googleapiclient.errors import HttpError
         import io
-        from playwright.async_api import async_playwright
 
         service = await get_gmail_service(user)
         
         # Get the full message to extract HTML body and inline images
         message = service.users().messages().get(
             userId='me',
-            id=request.email_id,
+            id=body.email_id,
             format='full'
         ).execute()
 
@@ -406,14 +428,14 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
                                 break
 
                         # Get image data
-                        body = part.get('body', {})
-                        if body.get('attachmentId'):
+                        part_body = part.get('body', {})
+                        if part_body.get('attachmentId'):
                             # Need to download attachment
                             try:
                                 attachment = service.users().messages().attachments().get(
                                     userId='me',
-                                    messageId=request.email_id,
-                                    id=body['attachmentId']
+                                    messageId=body.email_id,
+                                    id=part_body['attachmentId']
                                 ).execute()
                                 img_data = base64.urlsafe_b64decode(attachment['data'])
                                 img_base64 = base64.b64encode(img_data).decode('utf-8')
@@ -422,9 +444,9 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
                                 if content_id:
                                     inline_images[content_id] = f"data:{mime_type};base64,{img_base64}"
                             except Exception as e:
-                                print(f"Error downloading inline image: {e}")
-                        elif body.get('data'):
-                            img_data = base64.urlsafe_b64decode(body['data'])
+                                logger.error("Error downloading inline image: %s", e)
+                        elif part_body.get('data'):
+                            img_data = base64.urlsafe_b64decode(part_body['data'])
                             img_base64 = base64.b64encode(img_data).decode('utf-8')
                             mime_type = part.get('mimeType', 'image/jpeg')
 
@@ -435,7 +457,7 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
                     extract_inline_images(part)
 
         extract_inline_images(message['payload'])
-        print(f"Found {len(inline_images)} inline images")
+        logger.info("Found %d inline images", len(inline_images))
 
         # Extract HTML body
         def get_body(payload):
@@ -472,7 +494,7 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
                 html_content = html_content.replace(f'cid:{cid}', data_url)
                 # Also try without cid: prefix (some emails use just the ID)
                 html_content = re.sub(f'src=["\']?{re.escape(cid)}["\']?', f'src="{data_url}"', html_content)
-            print(f"Replaced {len(inline_images)} CID references in HTML")
+            logger.info("Replaced %d CID references in HTML", len(inline_images))
 
         if not html_content:
             return ProcessReceiptResponse(
@@ -485,10 +507,9 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
 
         # Convert HTML to PDF using Playwright (high quality, preserves formatting)
         try:
-            async with async_playwright() as p:
-                browser = await p.chromium.launch()
-                page = await browser.new_page()
-
+            browser = await get_browser()
+            page = await browser.new_page()
+            try:
                 # Set viewport to a standard email width
                 await page.set_viewport_size({"width": 800, "height": 1200})
 
@@ -511,7 +532,7 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
                             );
                         }
                     """)
-                except:
+                except Exception:
                     pass  # If image loading fails, continue anyway
 
                 # Generate PDF with good settings for receipts
@@ -522,8 +543,8 @@ async def process_email_body(request: ProcessEmailBodyRequest, user: AuthorizedU
                     display_header_footer=False,
                     margin={'top': '20px', 'right': '20px', 'bottom': '20px', 'left': '20px'}
                 )
-
-                await browser.close()
+            finally:
+                await page.close()
         except Exception as e:
             return ProcessReceiptResponse(
                 success=False,
@@ -600,8 +621,8 @@ Set confidence to:
         )
         
         raw_response = response.choices[0].message.content
-        print(f"OpenAI Vision response for email body: {raw_response}")
-        
+        logger.debug("OpenAI Vision response for email body: %s", raw_response)
+
         # Parse the JSON response
         import json
         try:
@@ -612,9 +633,9 @@ Set confidence to:
                 json_str = raw_response.split("```")[1].split("```")[0].strip()
             else:
                 json_str = raw_response.strip()
-            
+
             parsed_data = json.loads(json_str)
-            
+
             receipt_data = ReceiptData(
                 vendor=parsed_data.get("vendor"),
                 date=parsed_data.get("date"),
@@ -623,30 +644,30 @@ Set confidence to:
                 confidence=parsed_data.get("confidence", "low"),
                 raw_response=raw_response
             )
-            
+
             # Use email date as fallback if no date found in receipt
-            if not receipt_data.date and request.email_date:
-                receipt_data.date = request.email_date
-                print(f"Using email date as fallback: {request.email_date}")
-            
+            if not receipt_data.date and body.email_date:
+                receipt_data.date = body.email_date
+                logger.info("Using email date as fallback: %s", body.email_date)
+
             # Convert to USD if currency is not USD
             if receipt_data.currency and receipt_data.currency.upper() != 'USD' and receipt_data.amount and receipt_data.date:
-                print(f"Non-USD currency detected: {receipt_data.currency}. Converting to USD...")
+                logger.info("Non-USD currency detected: %s. Converting to USD...", receipt_data.currency)
                 conversion_result = convert_amount(
                     receipt_data.amount,
                     receipt_data.currency.upper(),
                     'USD',
                     receipt_data.date
                 )
-                
+
                 if conversion_result:
                     receipt_data.usd_amount = str(conversion_result['converted_amount'])
                     receipt_data.exchange_rate = conversion_result['exchange_rate']
                     receipt_data.conversion_date = conversion_result['date']
-                    print(f"Converted: {receipt_data.amount} {receipt_data.currency} = {receipt_data.usd_amount} USD")
+                    logger.info("Converted: %s %s = %s USD", receipt_data.amount, receipt_data.currency, receipt_data.usd_amount)
                 else:
-                    print(f"Warning: Could not convert {receipt_data.currency} to USD")
-            
+                    logger.warning("Could not convert %s to USD", receipt_data.currency)
+
             # Generate suggested filename: VENDOR_YYYY.MM.DD_Total
             suggested_filename = None
             if receipt_data.vendor and receipt_data.date and receipt_data.amount:
@@ -658,7 +679,7 @@ Set confidence to:
                 formatted_date = convert_date_format(receipt_data.date)
 
                 suggested_filename = f"{clean_vendor}_{formatted_date}_{receipt_data.amount}.pdf"
-            
+
             return ProcessReceiptResponse(
                 success=True,
                 receipt_data=receipt_data,
@@ -666,9 +687,9 @@ Set confidence to:
                 suggested_filename=suggested_filename,
                 pdf_content=pdf_content_base64
             )
-            
+
         except json.JSONDecodeError as e:
-            print(f"Failed to parse JSON: {e}")
+            logger.error("Failed to parse JSON: %s", e)
             return ProcessReceiptResponse(
                 success=False,
                 receipt_data=ReceiptData(
@@ -683,7 +704,7 @@ Set confidence to:
                 suggested_filename=None,
                 pdf_content=None
             )
-            
+
     except HttpError as e:
         return ProcessReceiptResponse(
             success=False,
@@ -693,9 +714,7 @@ Set confidence to:
             pdf_content=None
         )
     except Exception as e:
-        print(f"Error processing email body: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error processing email body")
         return ProcessReceiptResponse(
             success=False,
             receipt_data=None,
@@ -705,7 +724,8 @@ Set confidence to:
         )
 
 @router.post("/extract-receipt-data")
-async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceiptResponse:
+@limiter.limit("20/minute")
+async def extract_receipt_data(request: Request, extract_req: ExtractReceiptRequest) -> ExtractReceiptResponse:
     """
     Extract vendor, date, and amount from a receipt image using OpenAI Vision.
     
@@ -718,10 +738,10 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
     try:
         # Build list of images to process (supports single or multi-page)
         raw_images: list[str] = []
-        if request.images_base64:
-            raw_images = request.images_base64
-        elif request.image_base64:
-            raw_images = [request.image_base64]
+        if extract_req.images_base64:
+            raw_images = extract_req.images_base64
+        elif extract_req.image_base64:
+            raw_images = [extract_req.image_base64]
         else:
             return ExtractReceiptResponse(success=False, data=None, error="No image data provided")
 
@@ -733,11 +753,11 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
                 cropped_bytes = crop_receipt(raw_bytes)
                 if cropped_bytes:
                     processed_images.append(base64.b64encode(cropped_bytes).decode('utf-8'))
-                    print("Using auto-cropped receipt image for extraction")
+                    logger.info("Using auto-cropped receipt image for extraction")
                 else:
                     processed_images.append(img_b64)
             except Exception as e:
-                print(f"Receipt cropping skipped for a page: {e}")
+                logger.warning("Receipt cropping skipped for a page: %s", e)
                 processed_images.append(img_b64)
 
         # Initialize OpenAI client
@@ -774,7 +794,7 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
                 },
             })
 
-        print(f"Sending {len(processed_images)} image(s) to OpenAI Vision")
+        logger.info("Sending %d image(s) to OpenAI Vision", len(processed_images))
 
         # Call OpenAI Vision API
         response = client.chat.completions.create(
@@ -785,8 +805,8 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
         
         # Extract the response
         raw_response = response.choices[0].message.content
-        print(f"OpenAI Vision response: {raw_response}")
-        
+        logger.debug("OpenAI Vision response: %s", raw_response)
+
         # Parse the JSON response
         import json
         try:
@@ -798,9 +818,9 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
                 json_str = raw_response.split("```")[1].split("```")[0].strip()
             else:
                 json_str = raw_response.strip()
-            
+
             parsed_data = json.loads(json_str)
-            
+
             receipt_data = ReceiptData(
                 vendor=parsed_data.get("vendor"),
                 date=parsed_data.get("date"),
@@ -812,7 +832,7 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
 
             # Convert to USD if currency is not USD
             if receipt_data.currency and receipt_data.currency.upper() != 'USD' and receipt_data.amount and receipt_data.date:
-                print(f"Non-USD currency detected: {receipt_data.currency}. Converting to USD...")
+                logger.info("Non-USD currency detected: %s. Converting to USD...", receipt_data.currency)
                 conversion_result = convert_amount(
                     receipt_data.amount,
                     receipt_data.currency.upper(),
@@ -824,9 +844,9 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
                     receipt_data.usd_amount = str(conversion_result['converted_amount'])
                     receipt_data.exchange_rate = conversion_result['exchange_rate']
                     receipt_data.conversion_date = conversion_result['date']
-                    print(f"Converted: {receipt_data.amount} {receipt_data.currency} = {receipt_data.usd_amount} USD")
+                    logger.info("Converted: %s %s = %s USD", receipt_data.amount, receipt_data.currency, receipt_data.usd_amount)
                 else:
-                    print(f"Warning: Could not convert {receipt_data.currency} to USD")
+                    logger.warning("Could not convert %s to USD", receipt_data.currency)
 
             return ExtractReceiptResponse(
                 success=True,
@@ -835,8 +855,8 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
             )
 
         except json.JSONDecodeError as e:
-            print(f"Failed to parse JSON: {e}")
-            print(f"Raw response: {raw_response}")
+            logger.error("Failed to parse JSON: %s", e)
+            logger.error("Raw response: %s", raw_response)
 
             # Return with low confidence and raw response
             return ExtractReceiptResponse(
@@ -853,7 +873,7 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
             )
 
     except Exception as e:
-        print(f"Error extracting receipt data: {e}")
+        logger.error("Error extracting receipt data: %s", e)
         return ExtractReceiptResponse(
             success=False,
             data=None,
@@ -861,7 +881,8 @@ async def extract_receipt_data(request: ExtractReceiptRequest) -> ExtractReceipt
         )
 
 @router.post("/process-uploaded-receipt")
-async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedReceiptResponse:
+@limiter.limit("20/minute")
+async def process_uploaded_receipt(request: Request, file: UploadFile = File(...)) -> UploadedReceiptResponse:
     """
     Process an uploaded receipt file (PDF or image).
     Extracts vendor, date, and amount, and returns suggested filename.
@@ -873,7 +894,7 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
         Extracted receipt data, suggested filename, and base64 PDF content
     """
     try:
-        print(f"Processing uploaded file: {file.filename}, type: {file.content_type}")
+        logger.info("Processing uploaded file: %s, type: %s", file.filename, file.content_type)
 
         # Read file content with size limit
         file_content = await file.read()
@@ -896,7 +917,7 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
                 pdf_content_base64 = base64.b64encode(file_content).decode('utf-8')
                 pdf_doc.close()
             except Exception as e:
-                print(f"Error converting PDF to image: {e}")
+                logger.error("Error converting PDF to image: %s", e)
                 return UploadedReceiptResponse(
                     success=False,
                     error=f"Failed to process PDF: {str(e)}",
@@ -915,7 +936,7 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
                 img_rgb.save(pdf_buffer, format='PDF')
                 pdf_content_base64 = base64.b64encode(pdf_buffer.getvalue()).decode('utf-8')
             except Exception as e:
-                print(f"Error converting image to PDF: {e}")
+                logger.error("Error converting image to PDF: %s", e)
                 pdf_content_base64 = None
         else:
             return UploadedReceiptResponse(
@@ -966,8 +987,8 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
         )
         
         raw_response = response.choices[0].message.content
-        print(f"OpenAI Vision response: {raw_response}")
-        
+        logger.debug("OpenAI Vision response: %s", raw_response)
+
         # Parse JSON response
         import json
         try:
@@ -977,9 +998,9 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
                 json_str = raw_response.split("```")[1].split("```")[0].strip()
             else:
                 json_str = raw_response.strip()
-            
+
             parsed_data = json.loads(json_str)
-            
+
             receipt_data = ReceiptData(
                 vendor=parsed_data.get("vendor"),
                 date=parsed_data.get("date"),
@@ -988,25 +1009,25 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
                 confidence=parsed_data.get("confidence", "medium"),
                 raw_response=raw_response
             )
-            
+
             # Convert to USD if currency is not USD
             if receipt_data.currency and receipt_data.currency.upper() != 'USD' and receipt_data.amount and receipt_data.date:
-                print(f"Non-USD currency detected: {receipt_data.currency}. Converting to USD...")
+                logger.info("Non-USD currency detected: %s. Converting to USD...", receipt_data.currency)
                 conversion_result = convert_amount(
                     receipt_data.amount,
                     receipt_data.currency.upper(),
                     'USD',
                     receipt_data.date
                 )
-                
+
                 if conversion_result:
                     receipt_data.usd_amount = str(conversion_result['converted_amount'])
                     receipt_data.exchange_rate = conversion_result['exchange_rate']
                     receipt_data.conversion_date = conversion_result['date']
-                    print(f"Converted: {receipt_data.amount} {receipt_data.currency} = {receipt_data.usd_amount} USD")
+                    logger.info("Converted: %s %s = %s USD", receipt_data.amount, receipt_data.currency, receipt_data.usd_amount)
                 else:
-                    print(f"Warning: Could not convert {receipt_data.currency} to USD")
-            
+                    logger.warning("Could not convert %s to USD", receipt_data.currency)
+
             # Generate suggested filename: VENDOR_YYYY.MM.DD_Total.pdf
             suggested_filename = None
             if receipt_data.vendor and receipt_data.date and receipt_data.amount:
@@ -1019,8 +1040,8 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
                 formatted_date = convert_date_format(receipt_data.date)
 
                 suggested_filename = f"{clean_vendor}_{formatted_date}_{receipt_data.amount}.pdf"
-                print(f"Suggested filename: {suggested_filename}")
-            
+                logger.info("Suggested filename: %s", suggested_filename)
+
             return UploadedReceiptResponse(
                 success=True,
                 receipt_data=receipt_data,
@@ -1028,19 +1049,17 @@ async def process_uploaded_receipt(file: UploadFile = File(...)) -> UploadedRece
                 pdf_content=pdf_content_base64,
                 original_filename=file.filename
             )
-            
+
         except json.JSONDecodeError as e:
-            print(f"Failed to parse JSON: {e}")
+            logger.error("Failed to parse JSON: %s", e)
             return UploadedReceiptResponse(
                 success=False,
                 error=f"Failed to extract receipt data: {str(e)}",
                 original_filename=file.filename
             )
-            
+
     except Exception as e:
-        print(f"Error processing uploaded file: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error processing uploaded file")
         return UploadedReceiptResponse(
             success=False,
             error=str(e),

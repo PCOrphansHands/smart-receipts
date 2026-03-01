@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import RedirectResponse, HTMLResponse
 from pydantic import BaseModel
 import dropbox
@@ -6,6 +6,7 @@ from dropbox.oauth import DropboxOAuth2Flow
 import secrets
 import time
 import json
+import logging
 import requests
 from datetime import datetime
 import asyncpg
@@ -13,6 +14,11 @@ from app.auth import AuthorizedUser
 from app.env import Mode, mode
 from app.config import get_settings, get_secret
 from app.libs.token_encryption import encrypt_token, decrypt_token
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+logger = logging.getLogger(__name__)
+limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter(prefix="/dropbox")
 
@@ -31,11 +37,11 @@ async def _store_oauth_state(state: str, user_id: str = None):
                 state,
                 user_id
             )
-            print(f"Stored OAuth state: {state}")
+            logger.debug("Stored OAuth state: %s", state)
         finally:
             await conn.close()
     except Exception as e:
-        print(f"Error storing OAuth state: {e}")
+        logger.error("Error storing OAuth state: %s", e)
 
 async def _validate_oauth_state(state: str) -> tuple[bool, str | None]:
     """Validate and remove OAuth state from database. Returns (valid, user_id)"""
@@ -54,7 +60,7 @@ async def _validate_oauth_state(state: str) -> tuple[bool, str | None]:
             )
 
             if not row:
-                print(f"State {state} not found or expired")
+                logger.warning("State %s not found or expired", state)
                 return (False, None)
 
             # Delete the used state token
@@ -62,13 +68,13 @@ async def _validate_oauth_state(state: str) -> tuple[bool, str | None]:
                 "DELETE FROM dropbox_oauth_states WHERE state_token = $1",
                 state
             )
-            print(f"State validated and removed")
+            logger.debug("State validated and removed")
             return (True, row['user_id'])
 
         finally:
             await conn.close()
     except Exception as e:
-        print(f"Error validating OAuth state: {e}")
+        logger.error("Error validating OAuth state: %s", e)
         return (False, None)
 
 async def _get_dropbox_token(user_id: str) -> str | None:
@@ -85,7 +91,7 @@ async def _get_dropbox_token(user_id: str) -> str | None:
         finally:
             await conn.close()
     except Exception as e:
-        print(f"Error getting Dropbox token: {e}")
+        logger.error("Error getting Dropbox token: %s", e)
         return None
 
 class DropboxAuthUrlResponse(BaseModel):
@@ -148,7 +154,8 @@ class DropboxReceiptsResponse(BaseModel):
 
 
 @router.get("/auth-url")
-async def get_dropbox_auth_url(user: AuthorizedUser) -> DropboxAuthUrlResponse:
+@limiter.limit("5/minute")
+async def get_dropbox_auth_url(request: Request, user: AuthorizedUser) -> DropboxAuthUrlResponse:
     """
     Generate a Dropbox OAuth authorization URL.
     User should be redirected to this URL to authorize the app.
@@ -169,19 +176,18 @@ async def get_dropbox_auth_url(user: AuthorizedUser) -> DropboxAuthUrlResponse:
         
         return DropboxAuthUrlResponse(auth_url=auth_url, state=state)
     except Exception as e:
-        print(f"Error generating Dropbox auth URL: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error generating Dropbox auth URL")
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/callback")
-async def dropbox_callback(code: str, state: str):
+@limiter.limit("10/minute")
+async def dropbox_callback(request: Request, code: str, state: str):
     """
     Handle the OAuth callback from Dropbox.
     Redirects back to home page after success.
     """
-    print(f"Received callback with state: {state}")
+    logger.debug("Received callback with state: %s", state)
 
     # Get home URL from settings
     settings = get_settings()
@@ -190,7 +196,7 @@ async def dropbox_callback(code: str, state: str):
     # Validate state using the existing helper function
     valid, user_id = await _validate_oauth_state(state)
     if not valid:
-        print(f"Invalid or expired state: {state}")
+        logger.warning("Invalid or expired state: %s", state)
         return HTMLResponse(content=f"""
         <!DOCTYPE html>
         <html>
@@ -225,8 +231,8 @@ async def dropbox_callback(code: str, state: str):
         }
 
         response = requests.post(token_url, data=token_data)
-        print(f"Token exchange response status: {response.status_code}")
-        print(f"Token exchange response body: {response.text}")
+        logger.debug("Token exchange response status: %s", response.status_code)
+        logger.debug("Token exchange response body: %s", response.text)
 
         if response.status_code != 200:
             error_msg = response.json().get("error_description", "Unknown error")
@@ -279,11 +285,11 @@ async def dropbox_callback(code: str, state: str):
                     user_id,
                     encrypted_refresh_token
                 )
-                print(f"Dropbox OAuth successful! Refresh token stored for user {user_id}")
+                logger.info("Dropbox OAuth successful! Refresh token stored for user %s", user_id)
             finally:
                 await conn.close()
         else:
-            print("Warning: No user_id found, refresh token not stored")
+            logger.warning("No user_id found, refresh token not stored")
 
         # Redirect back to home page with success message
         return HTMLResponse(content=f"""
@@ -301,9 +307,7 @@ async def dropbox_callback(code: str, state: str):
         """)
         
     except Exception as e:
-        print(f"Dropbox OAuth error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Dropbox OAuth error")
         
         # Redirect back to home with error message
         return HTMLResponse(content=f"""
@@ -343,7 +347,7 @@ async def get_dropbox_status(user: AuthorizedUser) -> DropboxStatusResponse:
         )
 
     except Exception as e:
-        print(f"Error checking Dropbox status: {e}")
+        logger.error("Error checking Dropbox status: %s", e)
         return DropboxStatusResponse(
             connected=False,
             account_name=None,
@@ -356,7 +360,7 @@ async def disconnect_dropbox(user: AuthorizedUser):
     """
     Disconnect the user's Dropbox account by removing their stored tokens.
     """
-    print(f"Disconnecting Dropbox for user: {user.sub}")
+    logger.info("Disconnecting Dropbox for user: %s", user.sub)
     try:
         settings = get_settings()
         conn = await asyncpg.connect(settings.DATABASE_URL)
@@ -365,17 +369,18 @@ async def disconnect_dropbox(user: AuthorizedUser):
                 "DELETE FROM dropbox_tokens WHERE user_id = $1",
                 user.sub
             )
-            print(f"Dropbox tokens deleted for user: {user.sub}")
+            logger.info("Dropbox tokens deleted for user: %s", user.sub)
             return {"success": True, "message": "Dropbox disconnected successfully"}
         finally:
             await conn.close()
     except Exception as e:
-        print(f"Error disconnecting Dropbox: {e}")
+        logger.error("Error disconnecting Dropbox: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to disconnect Dropbox: {str(e)}")
 
 
 @router.post("/upload")
-async def upload_to_dropbox(request: UploadToDropboxRequest, user: AuthorizedUser) -> UploadToDropboxResponse:
+@limiter.limit("30/minute")
+async def upload_to_dropbox(request: Request, upload_req: UploadToDropboxRequest, user: AuthorizedUser) -> UploadToDropboxResponse:
     """
     Upload a file to Dropbox.
     Takes base64 encoded file content and uploads it to the specified folder.
@@ -388,17 +393,17 @@ async def upload_to_dropbox(request: UploadToDropboxRequest, user: AuthorizedUse
                 status_code=401,
                 detail="Dropbox not connected. Please connect your Dropbox account first."
             )
-        
+
         settings = get_settings()
         app_key = settings.DROPBOX_APP_KEY
         app_secret = settings.DROPBOX_APP_SECRET
-        
+
         # Decode base64 file content
         import base64
-        file_data = base64.b64decode(request.file_content)
-        
+        file_data = base64.b64decode(upload_req.file_content)
+
         # Construct full Dropbox path
-        dropbox_path = f"{request.folder_path}/{request.filename}"
+        dropbox_path = f"{upload_req.folder_path}/{upload_req.filename}"
         
         # Upload to Dropbox
         with dropbox.Dropbox(
@@ -413,7 +418,7 @@ async def upload_to_dropbox(request: UploadToDropboxRequest, user: AuthorizedUse
                 mode=dropbox.files.WriteMode.overwrite
             )
             
-            print(f"Successfully uploaded {request.filename} to Dropbox at {dropbox_path}")
+            logger.info("Successfully uploaded %s to Dropbox at %s", upload_req.filename, dropbox_path)
             
             return UploadToDropboxResponse(
                 success=True,
@@ -421,9 +426,7 @@ async def upload_to_dropbox(request: UploadToDropboxRequest, user: AuthorizedUse
             )
             
     except Exception as e:
-        print(f"Error uploading to Dropbox: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error uploading to Dropbox")
         return UploadToDropboxResponse(
             success=False,
             error=str(e)
@@ -566,9 +569,7 @@ async def list_dropbox_receipts(user: AuthorizedUser) -> DropboxReceiptsResponse
             )
             
     except Exception as e:
-        print(f"Error listing Dropbox receipts: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error listing Dropbox receipts")
         return DropboxReceiptsResponse(
             success=False,
             receipts=[],

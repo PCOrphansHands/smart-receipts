@@ -1,6 +1,9 @@
+import logging
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 import httpx
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -30,11 +33,11 @@ async def detect_language(request: Request) -> LanguageDetectionResponse:
         if not client_ip and request.client:
             client_ip = request.client.host
         
-        print(f"Detecting language for IP: {client_ip}")
+        logger.info("Detecting language for IP: %s", client_ip)
         
         # For local/private IPs, default to English
         if not client_ip or client_ip in ["127.0.0.1", "localhost", "::1"] or client_ip.startswith("192.168."):
-            print("Local IP detected, defaulting to English")
+            logger.debug("Local IP detected, defaulting to English")
             return LanguageDetectionResponse(
                 language="en",
                 country=None,
@@ -50,7 +53,7 @@ async def detect_language(request: Request) -> LanguageDetectionResponse:
                 country_code = data.get("country_code", "")
                 country_name = data.get("country_name", "")
                 
-                print(f"IP {client_ip} is from {country_name} ({country_code})")
+                logger.info("IP %s is from %s (%s)", client_ip, country_name, country_code)
                 
                 # Map country to language
                 language = "en"  # Default
@@ -65,7 +68,7 @@ async def detect_language(request: Request) -> LanguageDetectionResponse:
                     detected_from_ip=True
                 )
             else:
-                print(f"ipapi.co returned status {response.status_code}")
+                logger.warning("ipapi.co returned status %s", response.status_code)
                 # Default to English if geolocation fails
                 return LanguageDetectionResponse(
                     language="en",
@@ -74,9 +77,7 @@ async def detect_language(request: Request) -> LanguageDetectionResponse:
                 )
                 
     except Exception as e:
-        print(f"Error detecting language from IP: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error detecting language from IP")
         # Default to English on error
         return LanguageDetectionResponse(
             language="en",

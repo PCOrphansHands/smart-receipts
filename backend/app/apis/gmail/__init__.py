@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -6,6 +6,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 import base64
 import json
+import logging
 from typing import List, Optional
 from fastapi.responses import RedirectResponse, HTMLResponse
 from app.env import mode, Mode
@@ -17,6 +18,12 @@ from typing import Annotated
 from fastapi import Depends
 import secrets
 import asyncio
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+
+limiter = Limiter(key_func=get_remote_address)
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/gmail")
 
@@ -65,7 +72,7 @@ async def get_gmail_status(user: AuthorizedUser) -> GmailStatusResponse:
     Check if the user has connected their Gmail account.
     Returns connection status and email if connected.
     """
-    print(f"Gmail status check for user: {user.sub}")
+    logger.info("Gmail status check for user: %s", user.sub)
     try:
         settings = get_settings()
         database_url = settings.DATABASE_URL
@@ -82,16 +89,16 @@ async def get_gmail_status(user: AuthorizedUser) -> GmailStatusResponse:
             )
 
             if row:
-                print(f"Gmail status: CONNECTED (found tokens for {user.sub})")
+                logger.info("Gmail status: CONNECTED (found tokens for %s)", user.sub)
                 return GmailStatusResponse(connected=True)
             else:
-                print(f"Gmail status: NOT CONNECTED (no tokens found for {user.sub})")
+                logger.info("Gmail status: NOT CONNECTED (no tokens found for %s)", user.sub)
                 return GmailStatusResponse(connected=False)
         finally:
             await conn.close()
 
     except Exception as e:
-        print(f"Error checking Gmail status: {type(e).__name__}: {str(e)}")
+        logger.error("Error checking Gmail status: %s: %s", type(e).__name__, e)
         return GmailStatusResponse(connected=False)
 
 
@@ -100,7 +107,7 @@ async def disconnect_gmail(user: AuthorizedUser):
     """
     Disconnect the user's Gmail account by removing their stored tokens.
     """
-    print(f"Disconnecting Gmail for user: {user.sub}")
+    logger.info("Disconnecting Gmail for user: %s", user.sub)
     try:
         settings = get_settings()
         database_url = settings.DATABASE_URL
@@ -111,51 +118,52 @@ async def disconnect_gmail(user: AuthorizedUser):
                 "DELETE FROM gmail_tokens WHERE user_id = $1",
                 user.sub
             )
-            print(f"Gmail tokens deleted for user: {user.sub}")
+            logger.info("Gmail tokens deleted for user: %s", user.sub)
             return {"success": True, "message": "Gmail disconnected successfully"}
         finally:
             await conn.close()
     except Exception as e:
-        print(f"Error disconnecting Gmail: {e}")
+        logger.error("Error disconnecting Gmail: %s", e)
         raise HTTPException(status_code=500, detail=f"Failed to disconnect Gmail: {str(e)}")
 
 @router.get("/auth/start")
-async def start_gmail_auth(user: AuthorizedUser):
+@limiter.limit("5/minute")
+async def start_gmail_auth(request: Request, user: AuthorizedUser):
     """
     Starts the Gmail OAuth flow by generating an authorization URL.
     The user clicks this to grant access to their Gmail account.
     Returns the URL that the frontend should open in a popup.
     """
     try:
-        print(f"Starting Gmail OAuth for user: {user.sub}")
+        logger.info("Starting Gmail OAuth for user: %s", user.sub)
         credentials_json = get_secret("GMAIL_OAUTH_CREDENTIALS")
         credentials_data = json.loads(credentials_json)
-        print("Gmail credentials loaded successfully")
+        logger.info("Gmail credentials loaded successfully")
         
         # Get redirect URI from settings
         settings = get_settings()
         redirect_uri = f'{settings.BACKEND_URL}/routes/gmail/auth/callback'
         
-        print(f"Creating OAuth flow with redirect URI: {redirect_uri}")
+        logger.info("Creating OAuth flow with redirect URI: %s", redirect_uri)
         flow = Flow.from_client_config(
             credentials_data,
             scopes=SCOPES,
             redirect_uri=redirect_uri
         )
-        print("OAuth flow created successfully")
+        logger.info("OAuth flow created successfully")
         
         # Generate a state token to prevent CSRF and link to user
         state_token = secrets.token_urlsafe(32)
-        print(f"Generated state token: {state_token[:10]}...")
+        logger.debug("Generated state token: %s...", state_token[:10])
         
         # Store state token in database with user_id
         settings = get_settings()
         database_url = settings.DATABASE_URL
         
-        print("Connecting to database to store state token...")
+        logger.debug("Connecting to database to store state token")
         conn = await asyncpg.connect(database_url, timeout=3)
         try:
-            print("Inserting state token into database...")
+            logger.debug("Inserting state token into database")
             await asyncio.wait_for(
                 conn.execute(
                     """
@@ -167,43 +175,42 @@ async def start_gmail_auth(user: AuthorizedUser):
                 ),
                 timeout=3.0
             )
-            print("State token stored successfully")
+            logger.debug("State token stored successfully")
         finally:
             await conn.close()
 
-        print("Generating authorization URL...")
+        logger.info("Generating authorization URL")
         auth_url, _ = flow.authorization_url(prompt='consent', access_type='offline', state=state_token)
-        print(f"Authorization URL generated: {auth_url[:100]}...")
+        logger.debug("Authorization URL generated: %s...", auth_url[:100])
         
         return AuthUrlResponse(auth_url=auth_url)
         
     except json.JSONDecodeError as e:
-        print(f"JSON decode error: {str(e)}")
+        logger.error("JSON decode error: %s", e)
         raise HTTPException(
             status_code=500,
             detail="Invalid Gmail OAuth credentials format in secrets."
         )
     except Exception as e:
-        print(f"Error in start_gmail_auth: {type(e).__name__}: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Error in start_gmail_auth: %s: %s", type(e).__name__, e)
         raise HTTPException(
             status_code=500,
             detail=f"Failed to start OAuth flow: {str(e)}"
         )
 
 @router.get("/auth/callback")
-async def gmail_auth_callback(code: str, state: str | None = None):
+@limiter.limit("10/minute")
+async def gmail_auth_callback(request: Request, code: str, state: str | None = None):
     """
     Handle the OAuth callback from Google.
     Google redirects here after user grants permissions.
     Uses state parameter to link to the authenticated user.
     Redirects back to home page after success.
     """
-    print(f"Gmail callback started with state: {state[:10] if state else 'None'}...")
+    logger.info("Gmail callback started with state: %s...", state[:10] if state else 'None')
     try:
         if not state:
-            print("ERROR: Missing state parameter")
+            logger.error("Missing state parameter")
             # Get frontend URL from settings
             settings = get_settings()
             home_url = settings.FRONTEND_URL
@@ -224,7 +231,7 @@ async def gmail_auth_callback(code: str, state: str | None = None):
         database_url = settings.DATABASE_URL
         home_url = settings.FRONTEND_URL
         
-        print("Connecting to database to retrieve state token...")
+        logger.debug("Connecting to database to retrieve state token")
         conn = await asyncpg.connect(database_url)
         try:
             # Get user_id from state and delete the state token
@@ -234,22 +241,22 @@ async def gmail_auth_callback(code: str, state: str | None = None):
             )
             
             if not row:
-                print(f"ERROR: Invalid or expired state token: {state[:10]}...")
+                logger.error("Invalid or expired state token: %s...", state[:10])
                 raise HTTPException(status_code=400, detail="Invalid or expired state token")
             
             user_id = row['user_id']
-            print(f"Found user_id from state: {user_id}")
+            logger.debug("Found user_id from state: %s", user_id)
             
             # Delete the used state token
             await conn.execute(
                 "DELETE FROM gmail_oauth_states WHERE state_token = $1",
                 state
             )
-            print("State token deleted")
+            logger.debug("State token deleted")
         finally:
             await conn.close()
         
-        print("Loading Gmail credentials...")
+        logger.info("Loading Gmail credentials")
         credentials_json = get_secret("GMAIL_OAUTH_CREDENTIALS")
         credentials_data = json.loads(credentials_json)
         
@@ -257,7 +264,7 @@ async def gmail_auth_callback(code: str, state: str | None = None):
         settings = get_settings()
         redirect_uri = f'{settings.BACKEND_URL}/routes/gmail/auth/callback'
         
-        print("Creating OAuth flow...")
+        logger.info("Creating OAuth flow")
         flow = Flow.from_client_config(
             credentials_data,
             scopes=SCOPES,
@@ -265,10 +272,10 @@ async def gmail_auth_callback(code: str, state: str | None = None):
         )
         
         # Exchange code for tokens
-        print("Exchanging code for tokens...")
+        logger.info("Exchanging code for tokens")
         flow.fetch_token(code=code)
         credentials = flow.credentials
-        print(f"Got credentials - has refresh_token: {credentials.refresh_token is not None}")
+        logger.debug("Got credentials - has refresh_token: %s", credentials.refresh_token is not None)
         
         # Store the refresh token securely in database for this user
         token_data = {
@@ -281,7 +288,7 @@ async def gmail_auth_callback(code: str, state: str | None = None):
         }
         
         # Encrypt and save to database
-        print(f"Saving encrypted tokens to database for user_id: {user_id}")
+        logger.info("Saving encrypted tokens to database for user_id: %s", user_id)
         encrypted_token_data = encrypt_token(json.dumps(token_data))
         conn = await asyncpg.connect(database_url)
         try:
@@ -295,12 +302,12 @@ async def gmail_auth_callback(code: str, state: str | None = None):
                 user_id,
                 encrypted_token_data
             )
-            print("Tokens saved successfully!")
+            logger.info("Tokens saved successfully")
         finally:
             await conn.close()
         
         # Redirect back to home page with success message
-        print("Redirecting to home page with success")
+        logger.info("Redirecting to home page with success")
         return HTMLResponse(content=f"""
         <!DOCTYPE html>
         <html>
@@ -316,9 +323,7 @@ async def gmail_auth_callback(code: str, state: str | None = None):
         """)
         
     except Exception as e:
-        print(f"Gmail auth callback error: {str(e)}")
-        import traceback
-        traceback.print_exc()
+        logger.exception("Gmail auth callback error: %s", e)
         
         # Get frontend URL from settings for error redirect
         settings = get_settings()

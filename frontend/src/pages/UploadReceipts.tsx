@@ -45,7 +45,7 @@ export default function UploadReceipts() {
         if (data.folder_path) {
           setFolderPath(data.folder_path);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         apiLogger.error('Failed to fetch folder preference', error);
       }
     };
@@ -124,7 +124,7 @@ export default function UploadReceipts() {
         } else {
           toast.error(`Failed to process ${file.name}: ${data.error}`);
         }
-      } catch (error) {
+      } catch (error: unknown) {
         apiLogger.error('Failed to process uploaded file', { fileName: file.name, error });
         setFiles(prev => prev.map(f =>
           f.id === fileId
@@ -168,7 +168,7 @@ export default function UploadReceipts() {
       }
 
       // Send all images to AI for extraction (AI sees all pages at once)
-      let receiptData;
+      let receiptData: UploadedReceiptResponse['receipt_data'];
       if (imageBase64List.length > 0) {
         const extractResponse = await brain.extract_receipt_data(
           imageBase64List.length > 1
@@ -185,6 +185,10 @@ export default function UploadReceipts() {
         receiptData = pdfData.receipt_data;
       } else {
         throw new Error('No valid files to extract data from');
+      }
+
+      if (!receiptData) {
+        throw new Error('Failed to extract receipt data');
       }
 
       // Generate filename from extracted data
@@ -239,7 +243,7 @@ export default function UploadReceipts() {
       ));
 
       toast.success(`Combined ${validFiles.length} files: ${suggestedFilename}`);
-    } catch (error) {
+    } catch (error: unknown) {
       apiLogger.error('Failed to process combined files', error);
       setFiles(prev => prev.map(f =>
         f.id === fileId
@@ -351,7 +355,7 @@ export default function UploadReceipts() {
       ));
 
       toast.success(`Captured and processed: ${suggestedFilename}${pageCount > 1 ? ` (${pageCount} pages)` : ''}`);
-    } catch (error) {
+    } catch (error: unknown) {
       apiLogger.error('Failed to process camera image', error);
       setFiles(prev => prev.map(f =>
         f.id === fileId
@@ -446,7 +450,7 @@ export default function UploadReceipts() {
             uploadTimestamp: new Date().toISOString(),
             dropboxPaths: dropboxPaths,
           } : f));
-        } catch (trackError) {
+        } catch (trackError: unknown) {
           apiLogger.warn('Failed to track upload status in database', trackError);
           // Still mark as uploaded locally even if tracking fails
           setFiles(prev => prev.map(f => f.id === file.id ? {
@@ -457,7 +461,7 @@ export default function UploadReceipts() {
           } : f));
         }
 
-      } catch (error) {
+      } catch (error: unknown) {
         failed++;
         apiLogger.error('Failed to upload file to Dropbox', { fileName: file.originalName, error });
       }
@@ -489,7 +493,7 @@ export default function UploadReceipts() {
     setFiles(prev => prev.map(f => {
       if (f.id !== fileId || !f.data?.receipt_data) return f;
       const updatedData = { ...f.data.receipt_data, [field]: value };
-      const newFilename = generateFilename(updatedData.vendor, updatedData.date, updatedData.amount, f.data.suggested_filename);
+      const newFilename = generateFilename(updatedData.vendor, updatedData.date, updatedData.amount, f.data.suggested_filename ?? null);
       return {
         ...f,
         data: {

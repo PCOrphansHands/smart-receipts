@@ -42,7 +42,7 @@ export default function CameraCapture({ onCapture, onClose }: Props) {
         setStream(mediaStream);
         setIsCameraReady(true);
       }
-    } catch (error) {
+    } catch (error: unknown) {
       uiLogger.error('Failed to access camera', error);
       toast.error('Unable to access camera. Please check permissions.');
     }

@@ -36,3 +36,6 @@ PyMuPDF==1.24.5
 
 # HTML to PDF conversion with Playwright
 playwright==1.48.0
+
+# Rate limiting
+slowapi==0.1.9

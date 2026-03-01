@@ -3,8 +3,11 @@
 Provides functions to fetch historical exchange rates and convert currencies.
 """
 
+import logging
 import requests
 from datetime import datetime
+
+logger = logging.getLogger(__name__)
 
 
 def get_exchange_rate(from_currency: str, to_currency: str, date_str: str) -> float | None:
@@ -35,7 +38,7 @@ def get_exchange_rate(from_currency: str, to_currency: str, date_str: str) -> fl
             # YYYY-MM-DD format
             year, month, day = date_str.split('-')
         else:
-            print(f"Unrecognized date format: {date_str}")
+            logger.warning("Unrecognized date format: %s", date_str)
             return None
         api_date = f"{year}-{month.zfill(2)}-{day.zfill(2)}"
         
@@ -45,7 +48,7 @@ def get_exchange_rate(from_currency: str, to_currency: str, date_str: str) -> fl
         
         # Fetch exchange rates from API
         url = f"https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api@{api_date}/v1/currencies/{from_curr}.json"
-        print(f"Fetching exchange rate from: {url}")
+        logger.info("Fetching exchange rate from: %s", url)
         
         response = requests.get(url, timeout=10)
         response.raise_for_status()
@@ -56,14 +59,14 @@ def get_exchange_rate(from_currency: str, to_currency: str, date_str: str) -> fl
         # Response format: {"date": "2024-12-30", "mdl": {"usd": 0.0526, ...}}
         if from_curr in data and to_curr in data[from_curr]:
             rate = data[from_curr][to_curr]
-            print(f"Exchange rate: 1 {from_currency} = {rate} {to_currency} on {date_str}")
+            logger.info("Exchange rate: 1 %s = %s %s on %s", from_currency, rate, to_currency, date_str)
             return rate
         else:
-            print(f"Currency {to_currency} not found in response")
+            logger.warning("Currency %s not found in response", to_currency)
             return None
             
     except Exception as e:
-        print(f"Error fetching exchange rate: {e}")
+        logger.error("Error fetching exchange rate: %s", e)
         return None
 
 
@@ -126,5 +129,5 @@ def convert_amount(amount: str, from_currency: str, to_currency: str, date_str: 
         }
         
     except Exception as e:
-        print(f"Error converting amount: {e}")
+        logger.error("Error converting amount: %s", e)
         return None

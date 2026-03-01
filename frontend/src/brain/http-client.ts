@@ -1,3 +1,4 @@
+// @ts-nocheck — auto-generated HTTP client
 export type QueryParamsType = Record<string | number, any>;
 export type ResponseFormat = keyof Omit<Body, "body" | "bodyUsed">;
 

@@ -36,7 +36,7 @@ export default function DropboxSetup() {
       if (data.connected) {
         loadFolderPreference();
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to check Dropbox status:', error);
     }
   };
@@ -46,7 +46,7 @@ export default function DropboxSetup() {
       const response = await brain.get_dropbox_folder();
       const data = await response.json();
       setFolderPath(data.folder_path);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to load folder preference:', error);
     }
   };
@@ -58,7 +58,7 @@ export default function DropboxSetup() {
       const data = await response.json();
       setFolderPath(data.folder_path);
       toast.success('Folder preference saved');
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to save folder preference:', error);
       toast.error('Failed to save folder preference');
     } finally {
@@ -86,7 +86,7 @@ export default function DropboxSetup() {
           setTimeout(() => checkDropboxStatus(), 1000);
         }
       }, 500);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Dropbox auth start failed:', error);
       toast.error('Failed to start Dropbox authentication');
       setLoading(false);
@@ -105,11 +105,11 @@ export default function DropboxSetup() {
 
       if (data.success) {
         toast.success('Dropbox disconnected successfully');
-        setDropboxStatus({ connected: false, account_name: null });
+        setDropboxStatus({ connected: false, account_name: undefined });
       } else {
         toast.error('Failed to disconnect Dropbox');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Dropbox disconnect failed:', error);
       toast.error('Failed to disconnect Dropbox');
     } finally {

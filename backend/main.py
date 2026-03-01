@@ -1,8 +1,20 @@
+import logging
 import os
 import pathlib
 import json
-from fastapi import FastAPI, APIRouter, Depends
+from fastapi import FastAPI, APIRouter, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 # Load dotenv only in development (Vercel injects env vars directly)
 if os.getenv("ENVIRONMENT") != "production":
@@ -15,13 +27,16 @@ if os.getenv("ENVIRONMENT") != "production":
 from databutton_app.mw.auth_mw import AuthConfig, get_authorized_user
 from app.config import get_settings
 
+# Rate limiter — keyed by client IP
+limiter = Limiter(key_func=get_remote_address)
+
 
 def get_router_config() -> dict:
     try:
         config_path = pathlib.Path(__file__).parent / "routers.json"
         cfg = json.loads(config_path.read_text())
     except Exception as e:
-        print(f"Warning: Could not load routers.json: {e}")
+        logger.warning("Could not load routers.json: %s", e)
         return False
     return cfg
 
@@ -51,12 +66,12 @@ def import_api_routers() -> APIRouter:
     api_module_prefix = "app.apis."
 
     for name in api_names:
-        print(f"Importing API: {name}")
+        logger.info("Importing API: %s", name)
         try:
             api_module = __import__(api_module_prefix + name, fromlist=[name])
             api_router = getattr(api_module, "router", None)
             if isinstance(api_router, APIRouter):
-                print(f"  ✓ Successfully registered router: {name} with prefix: {api_router.prefix}")
+                logger.info("Registered router: %s (prefix: %s)", name, api_router.prefix)
                 routes.include_router(
                     api_router,
                     dependencies=(
@@ -66,14 +81,10 @@ def import_api_routers() -> APIRouter:
                     ),
                 )
             else:
-                print(f"  ✗ Module {name} has no 'router' attribute or it's not an APIRouter")
+                logger.warning("Module %s has no 'router' attribute or it's not an APIRouter", name)
         except Exception as e:
-            print(f"  ✗ Error importing {name}: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception("Error importing %s", name)
             continue
-
-    print(routes.routes)
 
     return routes
 
@@ -84,7 +95,7 @@ def get_supabase_auth_config() -> dict | None:
 
     # Check if Supabase JWT Secret is configured
     if not settings.SUPABASE_JWT_SECRET:
-        print("Warning: SUPABASE_JWT_SECRET not configured - authentication will be disabled")
+        logger.warning("SUPABASE_JWT_SECRET not configured - authentication will be disabled")
         return None
 
     # Supabase uses JWT Secret (HS256) for token validation
@@ -101,6 +112,16 @@ def create_app() -> FastAPI:
     """Create the app. This is called by uvicorn with the factory option to construct the app object."""
     app = FastAPI(title="Smart Receipts API", version="1.0.0")
 
+    # Configure rate limiting
+    app.state.limiter = limiter
+
+    @app.exception_handler(RateLimitExceeded)
+    async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Rate limit exceeded. Please try again later."},
+        )
+
     # Configure CORS
     settings = get_settings()
     allowed_origins = [
@@ -116,8 +137,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=allowed_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
     )
 
     # Add root health check endpoint
@@ -134,7 +155,7 @@ def create_app() -> FastAPI:
     for route in app.routes:
         if hasattr(route, "methods"):
             for method in route.methods:
-                print(f"{method} {route.path}")
+                logger.info("%s %s", method, route.path)
 
     # Configure Supabase authentication
     supabase_config = get_supabase_auth_config()
@@ -145,10 +166,10 @@ def create_app() -> FastAPI:
                 "SUPABASE_JWT_SECRET is required in production. "
                 "Set this environment variable before starting the server."
             )
-        print("Warning: No Supabase auth config found - authentication will be disabled in development")
+        logger.warning("No Supabase auth config found - authentication will be disabled in development")
         app.state.auth_config = None
     else:
-        print(f"Supabase auth configured with JWT Secret (HS256) - User authentication enabled")
+        logger.info("Supabase auth configured with JWT Secret (HS256) - User authentication enabled")
         app.state.auth_config = AuthConfig(**supabase_config)
 
     return app

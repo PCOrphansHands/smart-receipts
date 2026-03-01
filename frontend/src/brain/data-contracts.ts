@@ -37,7 +37,24 @@ export interface ProcessReceiptResponse {
   error?: string;
 }
 
+export interface GmailStatusResponse {
+  connected: boolean;
+}
+
 // Dropbox API Types
+export interface DropboxReceiptsResponse {
+  receipts: Array<{
+    vendor?: string;
+    date?: string;
+    amount?: string;
+    currency?: string;
+    filename: string;
+    modified_time?: string;
+  }>;
+  total_count: number;
+  error?: string;
+}
+
 export interface DropboxStatusResponse {
   connected: boolean;
   account_name?: string;

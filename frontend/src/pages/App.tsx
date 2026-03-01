@@ -73,7 +73,7 @@ export default function App() {
       const response = await brain.get_gmail_status();
       const data = await response.json();
       setGmailStatus(data);
-    } catch (error) {
+    } catch (error: unknown) {
       apiLogger.error("Failed to check Gmail status", error);
     }
   };
@@ -83,7 +83,7 @@ export default function App() {
       const statusResponse = await brain.get_dropbox_status();
       const statusData = await statusResponse.json();
       setDropboxStatus(statusData);
-    } catch (error) {
+    } catch (error: unknown) {
       apiLogger.error("Failed to check Dropbox status", error);
     }
   };
@@ -94,7 +94,7 @@ export default function App() {
       const receiptsResponse = await brain.list_dropbox_receipts();
       const receiptsDataResult = await receiptsResponse.json();
       setReceiptsData(receiptsDataResult);
-    } catch (error) {
+    } catch (error: unknown) {
       apiLogger.error("Failed to load receipts from Dropbox", error);
       toast.error('Failed to load receipts');
     } finally {
@@ -110,7 +110,7 @@ export default function App() {
         // Redirect to OAuth (will come back after auth completes)
         window.location.href = data.auth_url;
       }
-    } catch (error) {
+    } catch (error: unknown) {
       apiLogger.error('Gmail authentication failed', error);
       toast.error('Failed to start Gmail authentication');
     }
@@ -124,7 +124,7 @@ export default function App() {
         // Redirect to OAuth (will come back after auth completes)
         window.location.href = data.auth_url;
       }
-    } catch (error) {
+    } catch (error: unknown) {
       apiLogger.error('Dropbox authentication failed', error);
       toast.error('Failed to start Dropbox authentication');
     }

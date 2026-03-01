@@ -32,7 +32,7 @@ export const useLanguageDetection = () => {
             console.log(`Language auto-detected: ${data.language} (from ${data.country || 'IP'})`);
           }
         }
-      } catch (error) {
+      } catch (error: unknown) {
         // Silently fall back to English when backend is unavailable
         // This is expected during development when backend isn't running
         if (import.meta.env.DEV) {

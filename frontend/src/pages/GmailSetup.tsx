@@ -47,7 +47,7 @@ export default function GmailSetup() {
         const response = await brain.get_gmail_status();
         const data = await response.json();
         setIsAuthenticated(data.connected);
-      } catch (error) {
+      } catch (error: unknown) {
         console.error('Failed to check Gmail status:', error);
       }
     };
@@ -72,7 +72,7 @@ export default function GmailSetup() {
       const response = await brain.get_dropbox_status();
       const data = await response.json();
       setDropboxStatus(data);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to check Dropbox status:', error);
     }
   };
@@ -101,7 +101,7 @@ export default function GmailSetup() {
       if (data.success) {
         setUploadStatuses(data.statuses || {});
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to load upload statuses:', error);
     }
   };
@@ -125,7 +125,7 @@ export default function GmailSetup() {
       } else {
         toast.error('Failed to disconnect Gmail');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Gmail disconnect failed:', error);
       toast.error('Failed to disconnect Gmail');
     } finally {
@@ -224,13 +224,13 @@ export default function GmailSetup() {
             source_type: sourceType,
           }
         }));
-      } catch (trackError) {
+      } catch (trackError: unknown) {
         console.error('Failed to track upload status:', trackError);
         // Don't fail the upload if tracking fails
       }
 
       toast.success(message);
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to upload to Dropbox:', error);
       toast.error('Failed to upload to Dropbox');
     } finally {
@@ -287,7 +287,7 @@ export default function GmailSetup() {
         }
       }, 500);
 
-    } catch (error) {
+    } catch (error: unknown) {
       authLogger.error('Gmail authentication failed', error);
 
       // Check if it's a 401 error from the response
@@ -295,7 +295,7 @@ export default function GmailSetup() {
         authLogger.warn('401 error caught, redirecting to login');
         toast.error('Your session has expired. Please log in again.');
         navigate('/auth/sign-in');
-      } else if (typeof error === 'object' && error !== null && 'status' in error && error.status === 401) {
+      } else if (typeof error === 'object' && error !== null && 'status' in error && (error as { status: number }).status === 401) {
         authLogger.warn('401 status in error object, redirecting to login');
         toast.error('Your session has expired. Please log in again.');
         navigate('/auth/sign-in');
@@ -328,7 +328,7 @@ export default function GmailSetup() {
       console.log('First email has_attachments:', data.emails[0]?.has_attachments);
       setEmails(data);
       toast.success(`Found ${data.count} receipt emails!`);
-    } catch (error) {
+    } catch (error: unknown) {
       toast.error("Failed to scan emails");
       console.error(error);
     } finally {
@@ -347,7 +347,7 @@ export default function GmailSetup() {
           const response = await brain.get_email_attachments({ emailId });
           const data = await response.json();
           setEmailAttachments(prev => ({ ...prev, [emailId]: data }));
-        } catch (error) {
+        } catch (error: unknown) {
           console.error('Failed to fetch attachments:', error);
           toast.error('Failed to load attachments');
         }
@@ -372,7 +372,7 @@ export default function GmailSetup() {
       } else {
         toast.error(data.error || 'Failed to process receipt');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to process receipt:', error);
       toast.error('Failed to process receipt');
     } finally {
@@ -398,7 +398,7 @@ export default function GmailSetup() {
           const year = emailDate.getFullYear();
           formattedDate = `${day}.${month}.${year}`;
           console.log('Formatted email date as fallback:', formattedDate);
-        } catch (e) {
+        } catch (e: unknown) {
           console.warn('Failed to parse email date:', e);
         }
       }
@@ -415,7 +415,7 @@ export default function GmailSetup() {
       } else {
         toast.error(data.error || 'Failed to process email body');
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Failed to process email body:', error);
       toast.error('Failed to process email body');
     } finally {
@@ -453,7 +453,7 @@ export default function GmailSetup() {
       const receipt = prev[receiptKey];
       if (!receipt || !receipt.receipt_data) return prev;
       const updatedData = { ...receipt.receipt_data, [field]: value };
-      const newFilename = generateFilename(updatedData.vendor, updatedData.date, updatedData.amount, receipt.suggested_filename);
+      const newFilename = generateFilename(updatedData.vendor, updatedData.date, updatedData.amount, receipt.suggested_filename ?? null);
       return {
         ...prev,
         [receiptKey]: {

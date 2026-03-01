@@ -4,10 +4,13 @@ Detects the receipt in a photo and crops/perspective-corrects it,
 producing a clean top-down image suitable for OCR and AI extraction.
 """
 
+import logging
 import cv2
 import numpy as np
 from io import BytesIO
 from PIL import Image
+
+logger = logging.getLogger(__name__)
 
 
 def order_points(pts: np.ndarray) -> np.ndarray:
@@ -110,13 +113,13 @@ def crop_receipt(image_bytes: bytes) -> bytes | None:
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
 
         if image is None:
-            print("Receipt cropper: could not decode image")
+            logger.warning("Receipt cropper: could not decode image")
             return None
 
         contour = find_receipt_contour(image)
 
         if contour is None:
-            print("Receipt cropper: no receipt contour found, using original")
+            logger.debug("Receipt cropper: no receipt contour found, using original")
             return None
 
         # Apply perspective transform
@@ -125,12 +128,12 @@ def crop_receipt(image_bytes: bytes) -> bytes | None:
         # Encode back to JPEG
         success, encoded = cv2.imencode('.jpg', cropped, [cv2.IMWRITE_JPEG_QUALITY, 95])
         if not success:
-            print("Receipt cropper: failed to encode cropped image")
+            logger.error("Receipt cropper: failed to encode cropped image")
             return None
 
-        print(f"Receipt cropper: successfully cropped from {image.shape[:2]} to {cropped.shape[:2]}")
+        logger.info("Receipt cropper: successfully cropped from %s to %s", image.shape[:2], cropped.shape[:2])
         return encoded.tobytes()
 
     except Exception as e:
-        print(f"Receipt cropper: error during processing: {e}")
+        logger.error("Receipt cropper: error during processing: %s", e)
         return None

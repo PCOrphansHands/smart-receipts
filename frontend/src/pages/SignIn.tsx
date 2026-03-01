@@ -30,7 +30,7 @@ export default function SignIn() {
   const handleGoogleSignIn = async () => {
     try {
       await auth.signInWithGoogle();
-    } catch (error) {
+    } catch (error: unknown) {
       authLogger.error('Google sign-in failed', error);
       toast.error('Failed to sign in with Google');
     }

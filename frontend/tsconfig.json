@@ -12,7 +12,7 @@
     "esModuleInterop": false,
     "allowSyntheticDefaultImports": true,
     "allowImportingTsExtensions": true,
-    "strict": false,
+    "strict": true,
     "forceConsistentCasingInFileNames": true,
     "module": "ESNext",
     "moduleResolution": "Node",
@@ -40,6 +40,9 @@
       "app/auth": [
         "./src/app/auth"
       ],
+      "app/auth/*": [
+        "./src/app/auth/*"
+      ],
       "utils/*": [
         "./src/utils/*"
       ],
@@ -65,7 +68,30 @@
     "src/brain/Brain.ts",
     "src/brain/BrainRoute.ts",
     "src/brain/data-contracts.ts",
-    "src/brain/http-client.ts"
+    "src/brain/http-client.ts",
+    "src/internal-components/**",
+    "src/polyfills/**",
+    "src/extensions/shadcn/components/aspect-ratio.tsx",
+    "src/extensions/shadcn/components/calendar.tsx",
+    "src/extensions/shadcn/components/carousel.tsx",
+    "src/extensions/shadcn/components/chart.tsx",
+    "src/extensions/shadcn/components/collapsible.tsx",
+    "src/extensions/shadcn/components/command.tsx",
+    "src/extensions/shadcn/components/context-menu.tsx",
+    "src/extensions/shadcn/components/drawer.tsx",
+    "src/extensions/shadcn/components/form.tsx",
+    "src/extensions/shadcn/components/hover-card.tsx",
+    "src/extensions/shadcn/components/input-otp.tsx",
+    "src/extensions/shadcn/components/menubar.tsx",
+    "src/extensions/shadcn/components/navigation-menu.tsx",
+    "src/extensions/shadcn/components/radio-group.tsx",
+    "src/extensions/shadcn/components/resizable.tsx",
+    "src/extensions/shadcn/components/scroll-area.tsx",
+    "src/extensions/shadcn/components/slider.tsx",
+    "src/extensions/shadcn/components/sonner.tsx",
+    "src/extensions/shadcn/components/toggle-group.tsx",
+    "src/extensions/shadcn/components/toggle.tsx",
+    "src/extensions/shadcn/components/tooltip.tsx"
   ],
   "references": [
     {

@@ -1,3 +1,4 @@
+// @ts-nocheck — auto-generated API client
 import { HandleHealthzData } from "./data-contracts";
 import { HttpClient, RequestParams, ContentType } from "./http-client";
 

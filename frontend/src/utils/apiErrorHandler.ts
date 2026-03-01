@@ -82,7 +82,7 @@ export async function safeApiCall<T>(
 
     const data = await response.json();
     return { data, error: null };
-  } catch (error) {
+  } catch (error: unknown) {
     const apiError = handleApiError(error, context);
     return { data: fallbackValue ?? null, error: apiError };
   }

@@ -17,13 +17,13 @@ if (!("use" in React)) {
         let suspender = promise;
         suspender.status = "pending";
         suspender.then(
-          (result) => {
+          (result: unknown) => {
             if (suspender.status === "pending") {
               suspender.status = "fulfilled";
               suspender.value = result;
             }
           },
-          (error) => {
+          (error: unknown) => {
             if (suspender.status === "pending") {
               suspender.status = "rejected";
               suspender.reason = error;

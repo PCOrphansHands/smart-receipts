@@ -2,6 +2,7 @@
 Upload tracking API endpoints
 Tracks which receipts have been uploaded to Dropbox
 """
+import logging
 import os
 import json
 from datetime import datetime
@@ -10,6 +11,8 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import asyncpg
 from app.auth import AuthorizedUser
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/upload-tracking")
 
@@ -84,7 +87,7 @@ async def mark_uploaded(request: MarkUploadedRequest, user: AuthorizedUser) -> d
         finally:
             await conn.close()
     except Exception as e:
-        print(f"Error marking receipt as uploaded: {e}")
+        logger.error("Error marking receipt as uploaded: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -125,7 +128,7 @@ async def get_upload_status(request: GetUploadStatusRequest, user: AuthorizedUse
         finally:
             await conn.close()
     except Exception as e:
-        print(f"Error getting upload status: {e}")
+        logger.error("Error getting upload status: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -179,5 +182,5 @@ async def list_uploaded_receipts(user: AuthorizedUser, include_uploaded: bool = 
         finally:
             await conn.close()
     except Exception as e:
-        print(f"Error listing uploaded receipts: {e}")
+        logger.error("Error listing uploaded receipts: %s", e)
         raise HTTPException(status_code=500, detail=str(e))

@@ -1,4 +1,5 @@
 import functools
+import logging
 from http import HTTPStatus
 from typing import Annotated, Callable
 import jwt
@@ -7,6 +8,8 @@ from fastapi.requests import HTTPConnection
 from jwt import PyJWKClient
 from pydantic import BaseModel
 from starlette.requests import Request
+
+logger = logging.getLogger(__name__)
 
 
 class AuthConfig(BaseModel):
@@ -69,9 +72,9 @@ def get_authorized_user(
 
         if user is not None:
             return user
-        print("Request authentication returned no user")
+        logger.warning("Request authentication returned no user")
     except Exception as e:
-        print(f"Request authentication failed: {e}")
+        logger.warning("Request authentication failed: %s", e)
 
     if isinstance(request, WebSocket):
         raise WebSocketException(
@@ -119,7 +122,7 @@ def authorize_websocket(
             break
 
     if not token:
-        print(f"Missing bearer {prefix}.<token> in protocols")
+        logger.debug("Missing bearer %s.<token> in protocols", prefix)
         return None
 
     return authorize_token(token, auth_config)
@@ -131,12 +134,12 @@ def authorize_request(
 ) -> User | None:
     auth_header = request.headers.get(auth_config.header)
     if not auth_header:
-        print(f"Missing header '{auth_config.header}'")
+        logger.debug("Missing header '%s'", auth_config.header)
         return None
 
     token = auth_header.startswith("Bearer ") and auth_header[7:]
     if not token:
-        print(f"Missing bearer token in '{auth_config.header}'")
+        logger.debug("Missing bearer token in '%s'", auth_config.header)
         return None
 
     return authorize_token(token, auth_config)
@@ -158,9 +161,9 @@ def authorize_token(
                 audience=auth_config.audience,
                 options={"verify_aud": False}  # Supabase tokens don't always have audience
             )
-            print(f"Token validated using JWT Secret (HS256)")
+            logger.debug("Token validated using JWT Secret (HS256)")
         except jwt.PyJWTError as e:
-            print(f"Failed to decode token with JWT Secret: {e}")
+            logger.debug("Failed to decode token with JWT Secret: %s", e)
 
     # If JWT Secret didn't work, try JWKS (for RS256)
     if payload is None and auth_config.jwks_url:
@@ -172,17 +175,17 @@ def authorize_token(
                 algorithms=[alg],
                 audience=auth_config.audience,
             )
-            print(f"Token validated using JWKS (RS256)")
+            logger.debug("Token validated using JWKS (RS256)")
         except Exception as e:
-            print(f"Failed to decode token with JWKS: {e}")
+            logger.debug("Failed to decode token with JWKS: %s", e)
 
     if payload is None:
         return None
 
     try:
         user = User.model_validate(payload)
-        print(f"User {user.sub} authenticated")
+        logger.debug("User %s authenticated", user.sub)
         return user
     except Exception as e:
-        print(f"Failed to parse token payload {e}")
+        logger.warning("Failed to parse token payload: %s", e)
         return None
