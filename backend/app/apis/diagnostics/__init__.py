@@ -48,6 +48,22 @@ async def check_auth_config() -> AuthDiagnosticsResponse:
     )
 
 
+@router.get("/modules")
+async def check_modules():
+    """Check which API modules loaded successfully and which failed."""
+    import importlib
+    modules = ['receipt_extraction', 'dropbox_integration', 'gmail', 'language_detection', 'upload_tracking']
+    results = {}
+    for mod_name in modules:
+        try:
+            mod = importlib.import_module(f'app.apis.{mod_name}')
+            has_router = hasattr(mod, 'router')
+            results[mod_name] = {"status": "ok", "has_router": has_router}
+        except Exception as e:
+            results[mod_name] = {"status": "error", "error": f"{type(e).__name__}: {e}"}
+    return results
+
+
 class TokenDebugResponse(BaseModel):
     """Debug information about a JWT token"""
     has_token: bool
