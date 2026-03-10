@@ -22,7 +22,7 @@ google-auth-httplib2==0.2.0
 google-auth-oauthlib==1.2.0
 
 # Dropbox
-dropbox==11.36.2
+dropbox>=12.0.0
 
 # Image processing
 opencv-python-headless>=4.9.0

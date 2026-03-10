@@ -1,5 +1,5 @@
 [phases.setup]
-nixPkgs = ["python312", "cairo", "pkg-config"]
+nixPkgs = ["python312", "python312Packages.setuptools", "cairo", "pkg-config"]
 aptPkgs = [
   "libcairo2-dev",
   "libgl1-mesa-glx",
